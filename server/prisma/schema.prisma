@@ -1,0 +1,251 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── AUTH ──────────────────────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  avatarUrl String?
+  googleId  String?  @unique
+  password  String?  // null for OAuth-only accounts
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  resumes       Resume[]
+  applications  Application[]
+  refreshTokens RefreshToken[]
+  tags          Tag[]
+  contacts      Contact[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ─── RESUMES ────────────────────────────────────────────────────────────────
+
+model Resume {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name       String   // Display name: "Software Engineer v2", "ML Engineer"
+  s3Key      String   @unique
+  fileName   String
+  fileSize   Int      // bytes
+  parsedText String?  @db.Text // extracted PDF text used in AI prompts
+  isDefault  Boolean  @default(false)
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  applications Application[]
+
+  @@index([userId])
+  @@map("resumes")
+}
+
+// ─── APPLICATIONS ───────────────────────────────────────────────────────────
+
+enum ApplicationStatus {
+  WISHLIST
+  APPLIED
+  SCREENING
+  INTERVIEW
+  OFFER
+  REJECTED
+  WITHDRAWN
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERNSHIP
+  GRADUATE
+}
+
+model Application {
+  id       String @id @default(uuid())
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resumeId String?
+  resume   Resume? @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+
+  // Job details
+  companyName    String
+  jobTitle       String
+  jobUrl         String?
+  jobDescription String         @db.Text
+  location       String?
+  salaryMin      Int?           // stored in cents to avoid float issues
+  salaryMax      Int?
+  employmentType EmploymentType?
+  isRemote       Boolean        @default(false)
+
+  // Status
+  status      ApplicationStatus @default(WISHLIST)
+  appliedDate DateTime?
+  deadline    DateTime?
+
+  // AI analysis results — populated by POST /applications/:id/analyze
+  matchScore    Int?  // 0–100
+  matchAnalysis Json?
+  // matchAnalysis shape: {
+  //   matched: string[],
+  //   missing: string[],
+  //   suggestions: string[]
+  // }
+
+  // User notes
+  notes String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events        ApplicationEvent[]
+  coverLetters  CoverLetter[]
+  interviewPrep InterviewPrep?
+  contacts      Contact[]
+  tags          ApplicationTag[]
+
+  @@index([userId])
+  @@index([userId, status])
+  @@map("applications")
+}
+
+// ─── APPLICATION EVENTS (timeline) ──────────────────────────────────────────
+
+enum EventType {
+  CREATED
+  STATUS_CHANGED
+  NOTE_ADDED
+  RESUME_ATTACHED
+  COVER_LETTER_GENERATED
+  ANALYSIS_COMPLETED
+  INTERVIEW_PREP_GENERATED
+  MANUAL_NOTE
+}
+
+model ApplicationEvent {
+  id            String            @id @default(uuid())
+  applicationId String
+  application   Application       @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  eventType EventType
+  oldStatus ApplicationStatus?
+  newStatus ApplicationStatus?
+  note      String?             @db.Text
+  metadata  Json?               // flexible extra data per event type
+
+  createdAt DateTime @default(now())
+
+  @@index([applicationId])
+  @@map("application_events")
+}
+
+// ─── COVER LETTERS ──────────────────────────────────────────────────────────
+
+model CoverLetter {
+  id            String      @id @default(uuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  content  String  @db.Text
+  version  Int     @default(1)
+  isActive Boolean @default(true) // only one active version per application
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([applicationId])
+  @@map("cover_letters")
+}
+
+// ─── INTERVIEW PREP ─────────────────────────────────────────────────────────
+
+model InterviewPrep {
+  id            String      @id @default(uuid())
+  applicationId String      @unique
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  questions Json
+  // questions shape: Array<{
+  //   question: string,
+  //   category: 'technical' | 'behavioral' | 'company',
+  //   tips: string
+  // }>
+
+  generatedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("interview_prep")
+}
+
+// ─── CONTACTS ────────────────────────────────────────────────────────────────
+
+model Contact {
+  id            String      @id @default(uuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  name        String
+  role        String?
+  email       String?
+  linkedinUrl String?
+  notes       String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([applicationId])
+  @@map("contacts")
+}
+
+// ─── TAGS ────────────────────────────────────────────────────────────────────
+
+model Tag {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name  String
+  color String @default("#6366f1")
+
+  applications ApplicationTag[]
+
+  @@unique([userId, name])
+  @@map("tags")
+}
+
+model ApplicationTag {
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  tagId         String
+  tag           Tag         @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([applicationId, tagId])
+  @@map("application_tags")
+}

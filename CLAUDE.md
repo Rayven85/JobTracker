@@ -1,0 +1,292 @@
+# JobTracker — Claude Code Project Intelligence
+
+## What This Is
+AI-powered job application tracker built as a software engineering portfolio project.
+Target audience: NZ tech employers (Xero, ASB, Orion Health, Spark, Windcave, etc.)
+Demonstrates: TypeScript full-stack, PostgreSQL, AWS S3 + RDS, Docker, GitHub Actions CI/CD,
+JWT auth from scratch, Claude AI integration.
+
+---
+
+## Monorepo Structure
+
+```
+jobtracker/
+├── client/                        # Next.js 15 App Router — port 3000
+│   ├── src/
+│   │   ├── app/                   # Pages (App Router only — no pages/ directory)
+│   │   │   ├── (auth)/            # login/, register/ — no layout chrome
+│   │   │   ├── (dashboard)/       # dashboard/, applications/, resumes/ — with sidebar
+│   │   │   └── layout.tsx
+│   │   ├── components/
+│   │   │   ├── ui/                # shadcn/ui primitives (Button, Input, Badge, etc.)
+│   │   │   ├── applications/      # ApplicationCard, StatusBadge, KanbanBoard, etc.
+│   │   │   ├── resumes/           # ResumeUploader, ResumeCard, etc.
+│   │   │   └── layout/            # Sidebar, Header, etc.
+│   │   ├── lib/
+│   │   │   ├── api/               # One file per resource: applications.ts, resumes.ts, auth.ts
+│   │   │   └── utils.ts
+│   │   ├── hooks/                 # use-applications.ts, use-auth.ts, etc.
+│   │   └── types/                 # TypeScript types (keep in sync with server validators)
+│   ├── .env.local
+│   └── package.json
+│
+├── server/                        # Express.js API — port 4000
+│   ├── src/
+│   │   ├── controllers/           # HTTP only: extract input → call service → send response
+│   │   ├── services/              # Business logic, DB queries, external API calls
+│   │   ├── routes/                # Routers: attach middleware + map to controllers
+│   │   ├── middleware/
+│   │   │   ├── auth.ts            # JWT verification → attaches req.user
+│   │   │   ├── asyncHandler.ts    # Wraps async handlers, passes errors to next()
+│   │   │   ├── validate.ts        # Zod validation middleware factory
+│   │   │   └── errorHandler.ts    # Global error handler — formats AppError to response
+│   │   ├── validators/            # Zod schemas + inferred TS types, one file per resource
+│   │   ├── lib/
+│   │   │   ├── prisma.ts          # PrismaClient singleton
+│   │   │   ├── s3.ts              # AWS S3Client singleton + helper functions
+│   │   │   ├── claude.ts          # Anthropic client singleton
+│   │   │   └── AppError.ts        # Custom error class
+│   │   └── tests/                 # Jest + Supertest
+│   ├── prisma/
+│   │   └── schema.prisma
+│   ├── .env
+│   └── package.json
+│
+├── docker-compose.yml
+├── .github/workflows/ci.yml
+└── CLAUDE.md
+```
+
+---
+
+## Strict Layer Rules (enforce at all times)
+
+Controllers do exactly three things: extract validated input, call one service method, send response.
+No DB queries in controllers. No business logic. No direct Claude/S3 calls.
+
+Services own: DB queries (Prisma), external API calls (Claude, S3), all business logic.
+Services never import from Express (no Request, Response types).
+
+Routes attach middleware and map HTTP verbs to controllers. Nothing else.
+
+Validators are Zod schemas. Every validator file exports both the Zod schema AND the inferred TypeScript type.
+
+---
+
+## API Response Contract (every single endpoint — no exceptions)
+
+Success:
+```json
+{ "success": true, "data": { ... } }
+```
+
+Error:
+```json
+{ "success": false, "error": { "code": "SNAKE_CASE_ERROR_CODE", "message": "Human readable" } }
+```
+
+HTTP Status Codes:
+- 200 — GET, PATCH success
+- 201 — POST success (resource created)
+- 400 — Zod validation failure
+- 401 — Missing, invalid, or expired access token
+- 403 — Authenticated but accessing another user's resource
+- 404 — Resource not found
+- 409 — Conflict (e.g. duplicate email on register)
+- 500 — Unexpected server error
+
+---
+
+## asyncHandler (use on every route handler)
+
+```typescript
+// server/src/middleware/asyncHandler.ts
+import { RequestHandler } from 'express';
+
+export const asyncHandler = (fn: RequestHandler): RequestHandler =>
+  (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+```
+
+Never use try/catch in controllers. Throw errors from services — asyncHandler catches them.
+
+---
+
+## AppError
+
+```typescript
+// server/src/lib/AppError.ts
+export class AppError extends Error {
+  constructor(
+    public statusCode: number,
+    public code: string,
+    message: string
+  ) {
+    super(message);
+    this.name = 'AppError';
+  }
+}
+```
+
+Throw from services: `throw new AppError(404, 'APPLICATION_NOT_FOUND', 'Application not found')`
+The global errorHandler formats AppError into the standard error response shape.
+
+---
+
+## Auth System (JWT + Refresh Token Rotation)
+
+No NextAuth. Implemented from scratch to demonstrate auth fundamentals.
+
+Login flow:
+1. POST /api/v1/auth/login → verify password (bcrypt) → issue access token + refresh token
+2. Access token: 15 min expiry, JWT signed with JWT_ACCESS_SECRET, payload: { userId, email }
+3. Refresh token: 7-day expiry, stored in DB as bcrypt hash, set as HttpOnly cookie
+4. Every authenticated request: Authorization: Bearer <accessToken> header
+
+Token refresh:
+1. POST /api/v1/auth/refresh → read HttpOnly cookie → verify hash → issue new pair → revoke old
+
+Auth middleware reads Authorization header, verifies JWT, attaches req.user = { userId: string, email: string }.
+Throws AppError(401, 'INVALID_TOKEN', ...) on any failure.
+
+Authorization check (services): always verify `resource.userId === req.user.userId` before returning or mutating.
+
+Google OAuth via Passport.js:
+- GET /api/v1/auth/google → redirects to Google consent
+- GET /api/v1/auth/google/callback → finds or creates User, issues tokens, redirects to client
+
+---
+
+## S3 Upload Flow (presigned URLs — never buffer files in Express)
+
+Step 1 — Client POSTs to get a presigned URL:
+```
+POST /api/v1/resumes/presigned-url
+Body: { fileName: "Rayven_CV.pdf", contentType: "application/pdf" }
+Returns: { presignedUrl: string, s3Key: string }
+```
+The s3Key format: `resumes/{userId}/{nanoid()}.pdf`
+Presigned URL expiry: 600 seconds (10 minutes, no more).
+
+Step 2 — Client PUTs file directly to S3 (browser → S3, no Express involved):
+```
+PUT presignedUrl
+Headers: Content-Type: application/pdf
+Body: File binary
+```
+
+Step 3 — Client confirms upload:
+```
+POST /api/v1/resumes/confirm
+Body: { s3Key, fileName, fileSize, name }
+Server: creates Resume row in DB, enqueues PDF text extraction
+```
+
+Step 4 — Background PDF extraction:
+Server fetches PDF from S3 → extracts text with pdf-parse → saves to resumes.parsedText.
+This text is used verbatim in all Claude prompts. Never re-fetch from S3 during AI calls.
+
+---
+
+## Claude API Integration
+
+Singleton client in server/src/lib/claude.ts — instantiated once, imported everywhere.
+All prompts and Claude calls live exclusively in server/src/services/claude.service.ts.
+Never call Anthropic from controllers or other service files.
+
+Model: claude-sonnet-4-20250514
+Max tokens: 1024 (analysis JSON), 2048 (cover letters), 1024 (interview questions)
+
+Structured output rule — when Claude must return JSON, prompt must end with:
+"Respond ONLY in valid JSON. No markdown, no explanation, no code fences."
+Always parse with JSON.parse() in try/catch. On failure: throw new AppError(500, 'CLAUDE_PARSE_ERROR', 'AI response could not be parsed').
+
+Three Claude service methods:
+
+analyzeApplication(resumeText, jobDescription):
+  Returns: { score: number, matched: string[], missing: string[], suggestions: string[] }
+
+generateCoverLetter(resumeText, jobDescription, applicantName, companyName, jobTitle):
+  Returns: string (plain text, ~300 words, ready to display in textarea)
+
+generateInterviewQuestions(resumeText, jobDescription, companyName):
+  Returns: { questions: Array<{ question: string, category: 'technical'|'behavioral'|'company', tips: string }> }
+
+---
+
+## Testing
+
+Server: Jest + Supertest
+Test files: server/src/tests/*.test.ts
+Test DB: DATABASE_TEST_URL pointing to jobtracker_test database (separate from dev DB)
+Strategy: real DB with transactions that rollback after each test — never mock Prisma.
+
+Must test:
+- Auth middleware: valid token, expired token, missing token, wrong user's resource (403)
+- Each service method: happy path + main error cases (not found, wrong user, etc.)
+- API endpoints: correct response shape, 400 on invalid body, 401 on no auth, 404 on missing
+
+Client: Jest + React Testing Library
+Test files: co-located *.test.tsx next to components
+Must test: form validation, API error states, loading states, success renders.
+
+Run server tests: cd server && npx jest --runInBand
+Run client tests: cd client && npx jest
+
+---
+
+## Environment Variables
+
+server/.env:
+```
+DATABASE_URL=postgresql://jobtracker:password@localhost:5432/jobtracker
+DATABASE_TEST_URL=postgresql://jobtracker:password@localhost:5432/jobtracker_test
+JWT_ACCESS_SECRET=<64 random chars>
+JWT_REFRESH_SECRET=<64 different random chars>
+AWS_REGION=ap-southeast-2
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+S3_BUCKET_NAME=jobtracker-resumes-dev
+ANTHROPIC_API_KEY=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+CLIENT_URL=http://localhost:3000
+PORT=4000
+NODE_ENV=development
+```
+
+client/.env.local:
+```
+NEXT_PUBLIC_API_URL=http://localhost:4000
+```
+
+---
+
+## Code Conventions
+
+- async/await everywhere — no .then() chains, no callbacks
+- TypeScript strict mode ON in both tsconfig files — no `any` without // reason: comment
+- Zod validates every POST and PATCH request body, never trust raw req.body
+- Prisma for all DB access — no raw SQL unless a specific query has a documented performance reason
+- Component files: PascalCase.tsx | Route/service files: kebab-case.ts | Hooks: use-camel-case.ts
+- Client API calls: use fetch (not axios) in client/src/lib/api/ files
+- Server HTTP calls: use axios in server (for interceptors, timeout config)
+- No barrel files (index.ts re-exports) — they create circular dependency risk
+- Path alias: @/ maps to client/src/ for imports
+
+---
+
+## DO NOT — Critical Rules
+
+- Never put DB queries or business logic in controllers
+- Never call Claude or S3 from anywhere except their designated service files
+- Never return a password field, refresh token value, or AWS credentials in any response
+- Never use res.json(data) without the { success: true, data } wrapper
+- Never buffer a file upload in Express memory — always use presigned S3 URLs
+- Never use any TypeScript without a comment explaining why
+- Never wrap route handlers without asyncHandler
+- Never skip Zod validation on POST/PATCH
+- Never set presigned URL expiry longer than 10 minutes
+- Never store plain text passwords — bcrypt with saltRounds: 12
+- Never create barrel files
+- Never hardcode secrets — always use process.env and check for undefined at startup
