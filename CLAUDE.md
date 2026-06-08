@@ -12,7 +12,7 @@ JWT auth from scratch, Claude AI integration.
 
 ```
 jobtracker/
-├── client/                        # Next.js 15 App Router — port 3000
+├── client/                        # Next.js 15 App Router — port 3000 (see client/CLAUDE.md)
 │   ├── src/
 │   │   ├── app/                   # Pages (App Router only — no pages/ directory)
 │   │   │   ├── (auth)/            # login/, register/ — no layout chrome
@@ -31,7 +31,7 @@ jobtracker/
 │   ├── .env.local
 │   └── package.json
 │
-├── server/                        # Express.js API — port 4000
+├── server/                        # Express.js API — port 4000 (see server/CLAUDE.md)
 │   ├── src/
 │   │   ├── controllers/           # HTTP only: extract input → call service → send response
 │   │   ├── services/              # Business logic, DB queries, external API calls
@@ -194,7 +194,7 @@ Singleton client in server/src/lib/claude.ts — instantiated once, imported eve
 All prompts and Claude calls live exclusively in server/src/services/claude.service.ts.
 Never call Anthropic from controllers or other service files.
 
-Model: claude-sonnet-4-20250514
+Model: claude-sonnet-4-6
 Max tokens: 1024 (analysis JSON), 2048 (cover letters), 1024 (interview questions)
 
 Structured output rule — when Claude must return JSON, prompt must end with:
