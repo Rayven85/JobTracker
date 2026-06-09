@@ -33,20 +33,28 @@ jobtracker/
 │
 ├── server/                        # Express.js API — port 4000 (see server/CLAUDE.md)
 │   ├── src/
-│   │   ├── controllers/           # HTTP only: extract input → call service → send response
-│   │   ├── services/              # Business logic, DB queries, external API calls
-│   │   ├── routes/                # Routers: attach middleware + map to controllers
+│   │   ├── controllers/
+│   │   │   └── auth.controller.ts
+│   │   ├── services/
+│   │   │   └── auth.service.ts
+│   │   ├── routes/
+│   │   │   ├── index.ts           # Mounts all routers, /health endpoint
+│   │   │   └── auth.routes.ts
 │   │   ├── middleware/
 │   │   │   ├── auth.ts            # JWT verification → attaches req.user
 │   │   │   ├── asyncHandler.ts    # Wraps async handlers, passes errors to next()
 │   │   │   ├── validate.ts        # Zod validation middleware factory
 │   │   │   └── errorHandler.ts    # Global error handler — formats AppError to response
-│   │   ├── validators/            # Zod schemas + inferred TS types, one file per resource
+│   │   ├── validators/
+│   │   │   └── auth.validator.ts
 │   │   ├── lib/
-│   │   │   ├── prisma.ts          # PrismaClient singleton
+│   │   │   ├── prisma.ts          # PrismaClient singleton (uses PrismaPg adapter)
+│   │   │   ├── tokens.ts          # signAccessToken, signRefreshToken, hashToken, verifyAccessToken
 │   │   │   ├── s3.ts              # AWS S3Client singleton + helper functions
 │   │   │   ├── ai.ts              # AI client singleton (currently Gemini — swap provider here)
 │   │   │   └── AppError.ts        # Custom error class
+│   │   ├── types/
+│   │   │   └── express.d.ts       # Augments Express.Request with req.user
 │   │   └── tests/                 # Jest + Supertest
 │   ├── prisma/
 │   │   ├── schema.prisma
