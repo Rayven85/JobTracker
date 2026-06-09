@@ -4,7 +4,7 @@
 AI-powered job application tracker built as a software engineering portfolio project.
 Target audience: NZ tech employers (Xero, ASB, Orion Health, Spark, Windcave, etc.)
 Demonstrates: TypeScript full-stack, PostgreSQL, AWS S3 + RDS, Docker, GitHub Actions CI/CD,
-JWT auth from scratch, Claude AI integration.
+JWT auth from scratch, Gemini AI integration.
 
 ---
 
@@ -45,7 +45,7 @@ jobtracker/
 │   │   ├── lib/
 │   │   │   ├── prisma.ts          # PrismaClient singleton
 │   │   │   ├── s3.ts              # AWS S3Client singleton + helper functions
-│   │   │   ├── claude.ts          # Anthropic client singleton
+│   │   │   ├── ai.ts              # AI client singleton (currently Gemini — swap provider here)
 │   │   │   └── AppError.ts        # Custom error class
 │   │   └── tests/                 # Jest + Supertest
 │   ├── prisma/
@@ -63,9 +63,9 @@ jobtracker/
 ## Strict Layer Rules (enforce at all times)
 
 Controllers do exactly three things: extract validated input, call one service method, send response.
-No DB queries in controllers. No business logic. No direct Claude/S3 calls.
+No DB queries in controllers. No business logic. No direct AI/S3 calls.
 
-Services own: DB queries (Prisma), external API calls (Claude, S3), all business logic.
+Services own: DB queries (Prisma), external API calls (AI, S3), all business logic.
 Services never import from Express (no Request, Response types).
 
 Routes attach middleware and map HTTP verbs to controllers. Nothing else.
@@ -184,24 +184,41 @@ Server: creates Resume row in DB, enqueues PDF text extraction
 
 Step 4 — Background PDF extraction:
 Server fetches PDF from S3 → extracts text with pdf-parse → saves to resumes.parsedText.
-This text is used verbatim in all Claude prompts. Never re-fetch from S3 during AI calls.
+This text is used verbatim in all Gemini prompts. Never re-fetch from S3 during AI calls.
 
 ---
 
-## Claude API Integration
+## AI Integration
 
-Singleton client in server/src/lib/claude.ts — instantiated once, imported everywhere.
-All prompts and Claude calls live exclusively in server/src/services/claude.service.ts.
-Never call Anthropic from controllers or other service files.
+Provider-swappable AI layer. Changing provider = editing one file only: server/src/lib/ai.ts.
+All prompts and AI calls live exclusively in server/src/services/ai.service.ts.
+Never call the AI provider from controllers or other service files.
 
-Model: claude-sonnet-4-6
-Max tokens: 1024 (analysis JSON), 2048 (cover letters), 1024 (interview questions)
+Current provider: Google Gemini (free tier)
+Package: @google/generative-ai
+Model: gemini-1.5-flash (free tier — 15 RPM, 1M TPM, 1500 RPD)
 
-Structured output rule — when Claude must return JSON, prompt must end with:
-"Respond ONLY in valid JSON. No markdown, no explanation, no code fences."
-Always parse with JSON.parse() in try/catch. On failure: throw new AppError(500, 'CLAUDE_PARSE_ERROR', 'AI response could not be parsed').
+```typescript
+// server/src/lib/ai.ts  ← only file that changes when swapping providers
+import { GoogleGenerativeAI } from '@google/generative-ai';
+if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is required');
+export const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+```
 
-Three Claude service methods:
+Structured JSON output — use Gemini's native JSON mode (guarantees valid JSON, no prompt tricks needed):
+```typescript
+const model = genAI.getGenerativeModel({
+  model: 'gemini-1.5-flash',
+  generationConfig: { responseMimeType: 'application/json' }
+});
+const result = await model.generateContent(prompt);
+const parsed = JSON.parse(result.response.text());
+```
+Always wrap JSON.parse() in try/catch. On failure: throw new AppError(500, 'AI_PARSE_ERROR', 'AI response could not be parsed').
+
+Plain text output (cover letters) — omit generationConfig, call result.response.text() directly.
+
+Three AI service methods (signatures never change regardless of provider):
 
 analyzeApplication(resumeText, jobDescription):
   Returns: { score: number, matched: string[], missing: string[], suggestions: string[] }
@@ -247,7 +264,7 @@ AWS_REGION=ap-southeast-2
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
 S3_BUCKET_NAME=jobtracker-resumes-dev
-ANTHROPIC_API_KEY=
+GEMINI_API_KEY=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 CLIENT_URL=http://localhost:3000
@@ -279,7 +296,7 @@ NEXT_PUBLIC_API_URL=http://localhost:4000
 ## DO NOT — Critical Rules
 
 - Never put DB queries or business logic in controllers
-- Never call Claude or S3 from anywhere except their designated service files
+- Never call the AI provider or S3 from anywhere except their designated service files
 - Never return a password field, refresh token value, or AWS credentials in any response
 - Never use res.json(data) without the { success: true, data } wrapper
 - Never buffer a file upload in Express memory — always use presigned S3 URLs

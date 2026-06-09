@@ -12,7 +12,7 @@ Prerequisites to install manually before Phase 0:
 - Node.js 20+
 - PostgreSQL 16 running locally (or Docker)
 - AWS account with S3 bucket created (ap-southeast-2)
-- Anthropic API key
+- Google AI Studio API key (Gemini) — get free at aistudio.google.com
 - Google Cloud OAuth credentials (Client ID + Secret)
 
 ---
@@ -29,7 +29,7 @@ Set up a TypeScript monorepo for a project called JobTracker. Two packages:
    Install: @prisma/client prisma
    Install: jsonwebtoken @types/jsonwebtoken bcrypt @types/bcrypt
    Install: @aws-sdk/client-s3 @aws-sdk/s3-request-presigner
-   Install: @anthropic-ai/sdk
+   Install: @google/generative-ai
    Install: passport passport-google-oauth20 @types/passport @types/passport-google-oauth20
    Install: zod cors cookie-parser @types/cookie-parser helmet morgan @types/morgan
    Install: pdf-parse @types/pdf-parse
@@ -280,30 +280,37 @@ Write tests for:
 
 ---
 
-## Phase 6 — Claude AI Integration
+## Phase 6 — AI Integration
 
 **Goal:** Three AI endpoints: analyze, cover letter, interview prep.
 
 ```
-Implement Claude AI integration following CLAUDE.md claude section exactly.
+Implement AI integration following CLAUDE.md AI Integration section exactly.
+Provider is abstracted — swapping providers only requires editing server/src/lib/ai.ts.
 
 Files to create:
-- server/src/lib/claude.ts — Anthropic client singleton
-- server/src/services/claude.service.ts — all three AI methods
+- server/src/lib/ai.ts — AI client singleton (currently Gemini, swap here to change provider)
+- server/src/services/ai.service.ts — all three AI methods (signatures never change)
 - Add AI route handlers to server/src/controllers/application.controller.ts
 - Add AI routes to server/src/routes/application.routes.ts
 
-server/src/lib/claude.ts:
-  import Anthropic from '@anthropic-ai/sdk';
-  export const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+server/src/lib/ai.ts:
+  import { GoogleGenerativeAI } from '@google/generative-ai';
+  if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is required');
+  export const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-claude.service.ts — implement three methods. For each:
+ai.service.ts — implement three methods. For each:
   - Build a detailed prompt
-  - Call anthropic.messages.create with model 'claude-sonnet-4-20250514'
+  - For JSON responses: use generationConfig: { responseMimeType: 'application/json' }
   - Parse response with JSON.parse in try/catch
-  - Throw AppError(500, 'CLAUDE_PARSE_ERROR', ...) on parse failure
+  - Throw AppError(500, 'AI_PARSE_ERROR', ...) on parse failure
 
 analyzeApplication(resumeText: string, jobDescription: string):
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-1.5-flash',
+    generationConfig: { responseMimeType: 'application/json' }
+  });
+  
   Prompt structure:
   "You are an expert technical recruiter helping a candidate assess their job application fit.
    
@@ -313,41 +320,40 @@ analyzeApplication(resumeText: string, jobDescription: string):
    JOB DESCRIPTION:
    [jobDescription]
    
-   Analyze the match and return ONLY valid JSON in this exact format:
+   Analyze the match and return JSON in this exact format:
    {
      \"score\": <integer 0-100 representing overall fit>,
      \"matched\": [<keywords/skills present in both resume and JD>],
      \"missing\": [<important keywords/skills in JD not in resume>],
      \"suggestions\": [<specific, actionable resume improvement suggestions>]
-   }
-   
-   Respond ONLY in valid JSON. No markdown, no explanation, no code fences."
-  
-  max_tokens: 1024
+   }"
   
   After getting response:
   - Update Application with matchScore and matchAnalysis
   - Create ApplicationEvent of type ANALYSIS_COMPLETED
 
 generateCoverLetter(resumeText, jobDescription, applicantName, companyName, jobTitle):
-  Prompt should instruct Claude to:
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });  // plain text — no JSON mode
+  
+  Prompt should instruct the model to:
   - Write a professional, enthusiastic cover letter (~300 words)
   - Reference specific skills/experiences from the resume that match the JD
   - Not invent experience not in the resume
   - Format: "Dear Hiring Manager," opening, 3 body paragraphs, "Sincerely, [name]" closing
   - Return plain text only
   
-  max_tokens: 2048
-  
   After getting response:
   - Create CoverLetter row (set any existing isActive to false first)
   - Create ApplicationEvent of type COVER_LETTER_GENERATED
 
 generateInterviewQuestions(resumeText, jobDescription, companyName):
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-1.5-flash',
+    generationConfig: { responseMimeType: 'application/json' }
+  });
+  
   Returns JSON: { questions: [{ question, category, tips }] }
   Generate 8 questions: 3 technical, 3 behavioral, 2 company-specific
-  
-  max_tokens: 1024
   
   After getting response:
   - Upsert InterviewPrep row (use updateOrCreate pattern with applicationId as unique key)
@@ -363,11 +369,11 @@ Route handlers (auth required for all):
 Each handler must:
 1. Get the application (check userId match)
 2. Verify resume is attached and parsedText is not null (throw AppError 400 if missing)
-3. Call claude.service method
+3. Call ai.service method
 4. Return formatted response per api-spec.md
 
 Write tests:
-- Mock the anthropic client
+- Mock the @google/generative-ai module (jest.mock)
 - analyzeApplication returns correct shape and updates Application row
 - generateCoverLetter creates CoverLetter row with isActive: true
 - generateInterviewQuestions creates 8 questions
@@ -541,10 +547,10 @@ Server tests to add/complete:
    - getApplication returns 403 when userId doesn't match
    - getApplication includes coverLetters, contacts, interviewPrep, events in response
 
-3. server/src/tests/claude.test.ts:
-   - Mock the Anthropic client (jest.mock the module)
-   - analyzeApplication returns correct shape when Claude returns valid JSON
-   - analyzeApplication throws CLAUDE_PARSE_ERROR when Claude returns invalid JSON
+3. server/src/tests/ai.test.ts:
+   - Mock the @google/generative-ai module (jest.mock)
+   - analyzeApplication returns correct shape when AI returns valid JSON
+   - analyzeApplication throws AI_PARSE_ERROR when AI returns invalid JSON
    - generateCoverLetter creates CoverLetter row and sets previous isActive to false
    - All three methods throw 400 if application.resume.parsedText is null
 
@@ -649,7 +655,7 @@ Jobs:
    - Build server TypeScript: cd server && npx tsc --noEmit
    - Build client: cd client && npm run build
 
-Store secrets in GitHub repo settings: ANTHROPIC_API_KEY, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+Store secrets in GitHub repo settings: GEMINI_API_KEY, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
 
 Add README.md at project root documenting:
 - What the project is (1 paragraph)
@@ -667,7 +673,7 @@ Add README.md at project root documenting:
 Phase 2 — Auth: "Why refresh token rotation? What happens if a refresh token is stolen?"
 Phase 4 — S3: "Why presigned URLs instead of routing through the server? What are the tradeoffs?"
 Phase 5 — Events: "Why store status change history rather than just the current status?"
-Phase 6 — Claude: "How did you prompt Claude to return structured JSON reliably? What happens when it fails?"
+Phase 6 — AI: "How did you abstract the AI provider so you can swap Gemini for Claude by editing one file? Why native JSON mode over prompt-based extraction?"
 Phase 7 — Dashboard: "How did you calculate response rate and avgDaysToResponse efficiently in one DB round trip?"
 Phase 10 — Tests: "What's your testing strategy? Why real DB over mocked Prisma?"
 Phase 12 — CI: "Walk me through what happens when you push a PR to this repo."
