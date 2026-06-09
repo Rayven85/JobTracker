@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { Prisma } from '@prisma/client';
 import { AppError } from '../lib/AppError';
 
 export function errorHandler(
@@ -13,6 +14,23 @@ export function errorHandler(
       error: { code: err.code, message: err.message },
     });
     return;
+  }
+
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    if (err.code === 'P2002') {
+      res.status(409).json({
+        success: false,
+        error: { code: 'CONFLICT', message: 'Resource already exists' },
+      });
+      return;
+    }
+    if (err.code === 'P2025') {
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Resource not found' },
+      });
+      return;
+    }
   }
 
   const isDev = process.env.NODE_ENV === 'development';
