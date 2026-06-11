@@ -1,76 +1,104 @@
 @import "tailwindcss";
 @plugin "tailwindcss-animate";
 
-@custom-variant dark (&:is(.dark *));
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
+  --color-background:         var(--background);
+  --color-foreground:         var(--foreground);
+  --color-card:               var(--card);
+  --color-card-foreground:    var(--card-foreground);
+  --color-popover:            var(--popover);
   --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
+  --color-primary:            var(--primary);
   --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
+  --color-secondary:          var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --color-muted:              var(--muted);
+  --color-muted-foreground:   var(--muted-foreground);
+  --color-accent:             var(--accent);
+  --color-accent-foreground:  var(--accent-foreground);
+  --color-destructive:        var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border:             var(--border);
+  --color-input:              var(--input);
+  --color-ring:               var(--ring);
+  --color-sidebar:            var(--sidebar);
+
+  /* Font: resolved from a CSS var so it switches with the theme */
+  --font-sans: var(--font-body);
+
+  /* Radius tokens — components always use rounded-[--radius] etc. */
+  --radius-sm: var(--radius-sm-val);
+  --radius-md: var(--radius);
+  --radius-lg: var(--radius-lg-val);
+  --radius-xl: var(--radius-xl-val);
 }
 
+/* ─── Earthy theme (default) ─────────────────────────────────────────── */
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.141 0.005 285.823);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.141 0.005 285.823);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.141 0.005 285.823);
-  --primary: oklch(0.21 0.006 285.885);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.21 0.006 285.885);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.705 0.015 286.067);
+  /* Radius */
+  --radius:      0.375rem;   /* 6px */
+  --radius-sm-val: 0.25rem;
+  --radius-lg-val: 0.5rem;
+  --radius-xl-val: 0.75rem;
+
+  /* Font */
+  --font-body: Georgia, 'Times New Roman', serif;
+
+  /* Colors — warm cream palette, rust primary */
+  --background:           oklch(0.961 0.019 75);
+  --foreground:           oklch(0.200 0.048 52);
+  --card:                 oklch(0.988 0.012 75);
+  --card-foreground:      oklch(0.200 0.048 52);
+  --popover:              oklch(0.988 0.012 75);
+  --popover-foreground:   oklch(0.200 0.048 52);
+  --primary:              oklch(0.530 0.165 36);   /* rust / terracotta */
+  --primary-foreground:   oklch(0.990 0.000 0);
+  --secondary:            oklch(0.910 0.025 72);
+  --secondary-foreground: oklch(0.200 0.048 52);
+  --muted:                oklch(0.920 0.024 72);
+  --muted-foreground:     oklch(0.510 0.040 55);
+  --accent:               oklch(0.900 0.028 72);
+  --accent-foreground:    oklch(0.200 0.048 52);
+  --destructive:          oklch(0.580 0.200 26);
+  --destructive-foreground: oklch(0.990 0.000 0);
+  --border:               oklch(0.870 0.030 72);
+  --input:                oklch(0.935 0.022 72);
+  --ring:                 oklch(0.530 0.165 36);
+  --sidebar:              oklch(0.975 0.014 75);
 }
 
-.dark {
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.92 0.004 286.32);
-  --primary-foreground: oklch(0.21 0.006 285.885);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.552 0.016 285.938);
+/* ─── Rose / Alt theme ───────────────────────────────────────────────── */
+.alt-theme {
+  /* Radius */
+  --radius:       1rem;      /* 16px */
+  --radius-sm-val: 0.75rem;
+  --radius-lg-val: 1.25rem;
+  --radius-xl-val: 1.5rem;
+
+  /* Font — Playfair Display injected via CSS variable from next/font */
+  --font-body: var(--font-playfair), Georgia, serif;
+
+  /* Colors — pale pink palette, deep rose primary */
+  --background:           oklch(0.972 0.016 358);
+  --foreground:           oklch(0.185 0.048 350);
+  --card:                 oklch(0.991 0.009 358);
+  --card-foreground:      oklch(0.185 0.048 350);
+  --popover:              oklch(0.991 0.009 358);
+  --popover-foreground:   oklch(0.185 0.048 350);
+  --primary:              oklch(0.540 0.215 355);  /* deep rose */
+  --primary-foreground:   oklch(0.990 0.000 0);
+  --secondary:            oklch(0.930 0.020 357);
+  --secondary-foreground: oklch(0.185 0.048 350);
+  --muted:                oklch(0.930 0.020 357);
+  --muted-foreground:     oklch(0.510 0.038 350);
+  --accent:               oklch(0.915 0.022 357);
+  --accent-foreground:    oklch(0.185 0.048 350);
+  --destructive:          oklch(0.580 0.200 26);
+  --destructive-foreground: oklch(0.990 0.000 0);
+  --border:               oklch(0.880 0.028 357);
+  --input:                oklch(0.948 0.017 357);
+  --ring:                 oklch(0.540 0.215 355);
+  --sidebar:              oklch(0.980 0.013 358);
 }
 
 @layer base {
@@ -79,5 +107,6 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-body);
   }
 }

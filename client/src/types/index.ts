@@ -74,6 +74,7 @@ export interface Resume {
   fileName: string
   fileSize: number
   parsedText: string | null
+  isDefault: boolean
   createdAt: string
 }
 
