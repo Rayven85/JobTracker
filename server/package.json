@@ -56,10 +56,15 @@
     "ts-jest": "^29.4.11"
   },
   "jest": {
-    "preset": "ts-jest",
     "testEnvironment": "node",
     "testMatch": [
       "**/tests/**/*.test.ts"
-    ]
+    ],
+    "setupFiles": [
+      "<rootDir>/src/tests/setup.ts"
+    ],
+    "transform": {
+      "^.+\\.ts$": ["ts-jest", { "tsconfig": "<rootDir>/tsconfig.test.json" }]
+    }
   }
 }
