@@ -87,6 +87,16 @@ describe('GET /api/v1/resumes/:id', () => {
 });
 
 describe('DELETE /api/v1/resumes/:id', () => {
+  it('returns 404 if resume does not exist', async () => {
+    const res = await request(app)
+      .delete('/api/v1/resumes/00000000-0000-0000-0000-000000000000')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(404);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error.code).toBe('RESUME_NOT_FOUND');
+  });
+
   it('removes resume from DB', async () => {
     const resume = await prisma.resume.create({
       data: {

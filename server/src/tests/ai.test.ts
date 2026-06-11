@@ -78,6 +78,19 @@ beforeEach(() => {
 // ─── analyzeApplication ────────────────────────────────────────────────────────
 
 describe('POST /api/v1/applications/:id/analyze', () => {
+  it('returns 500 AI_PARSE_ERROR when AI returns invalid JSON', async () => {
+    mockGenerateContent.mockResolvedValueOnce({
+      response: { text: () => 'not valid json {{' },
+    });
+
+    const res = await request(app)
+      .post(`/api/v1/applications/${applicationId}/analyze`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(500);
+    expect(res.body.error.code).toBe('AI_PARSE_ERROR');
+  });
+
   it('returns correct shape and updates Application row', async () => {
     mockGenerateContent.mockResolvedValueOnce({
       response: {
@@ -139,6 +152,31 @@ describe('POST /api/v1/applications/:id/cover-letter', () => {
     const dbLetter = await prisma.coverLetter.findUnique({ where: { id: res.body.data.id } });
     expect(dbLetter).not.toBeNull();
     expect(dbLetter!.isActive).toBe(true);
+  });
+
+  it('sets previous cover letter isActive to false when new letter is generated', async () => {
+    mockGenerateContent.mockResolvedValueOnce({
+      response: { text: () => 'First version of the cover letter.' },
+    });
+    const firstRes = await request(app)
+      .post(`/api/v1/applications/${applicationId}/cover-letter`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+    expect(firstRes.status).toBe(201);
+    const firstId: string = firstRes.body.data.id;
+
+    mockGenerateContent.mockResolvedValueOnce({
+      response: { text: () => 'Second version of the cover letter.' },
+    });
+    const secondRes = await request(app)
+      .post(`/api/v1/applications/${applicationId}/cover-letter`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+    expect(secondRes.status).toBe(201);
+    expect(secondRes.body.data.isActive).toBe(true);
+
+    const firstInDb = await prisma.coverLetter.findUnique({ where: { id: firstId } });
+    expect(firstInDb!.isActive).toBe(false);
   });
 
   it('returns 400 when no resume is attached', async () => {
