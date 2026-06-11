@@ -6,6 +6,7 @@ import { resumeRouter } from './resume.routes';
 import { applicationRouter } from './application.routes';
 import { contactRouter } from './contact.routes';
 import { tagRouter } from './tag.routes';
+import { coverLetterRouter } from './cover-letter.routes';
 
 export const router = Router();
 
@@ -19,3 +20,4 @@ router.use('/resumes', resumeRouter);
 router.use('/applications', applicationRouter);
 router.use('/contacts', contactRouter);
 router.use('/tags', tagRouter);
+router.use('/cover-letters', coverLetterRouter);

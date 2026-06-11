@@ -36,22 +36,25 @@ jobtracker/
 │   │   ├── controllers/
 │   │   │   ├── auth.controller.ts
 │   │   │   ├── resume.controller.ts
-│   │   │   ├── application.controller.ts
+│   │   │   ├── application.controller.ts  # + analyzeApplication, generateCoverLetter, generateInterviewQuestions
 │   │   │   ├── contact.controller.ts
-│   │   │   └── tag.controller.ts
+│   │   │   ├── tag.controller.ts
+│   │   │   └── cover-letter.controller.ts # updateCoverLetter, downloadCoverLetter
 │   │   ├── services/
 │   │   │   ├── auth.service.ts    # register, login, refresh, logout, getMe, findOrCreateGoogleUser, loginWithGoogle
 │   │   │   ├── resume.service.ts
 │   │   │   ├── application.service.ts  # listApplications, createApplication, getApplication, updateApplication, updateStatus, deleteApplication, getEvents, addTag, removeTag
 │   │   │   ├── contact.service.ts      # createContact, updateContact, deleteContact
-│   │   │   └── tag.service.ts          # listTags, createTag, deleteTag
+│   │   │   ├── tag.service.ts          # listTags, createTag, deleteTag
+│   │   │   └── ai.service.ts           # analyzeApplication, generateCoverLetter, generateInterviewQuestions, updateCoverLetter, getCoverLetter
 │   │   ├── routes/
 │   │   │   ├── index.ts           # Mounts all routers, /health endpoint
 │   │   │   ├── auth.routes.ts
 │   │   │   ├── resume.routes.ts
-│   │   │   ├── application.routes.ts  # /applications + nested /:id/tags, /:id/contacts, /:id/events
+│   │   │   ├── application.routes.ts  # /applications + nested /:id/tags, /:id/contacts, /:id/events, /:id/analyze, /:id/cover-letter, /:id/interview-prep
 │   │   │   ├── contact.routes.ts      # /contacts/:id (PATCH, DELETE)
-│   │   │   └── tag.routes.ts          # /tags (GET, POST, DELETE /:id)
+│   │   │   ├── tag.routes.ts          # /tags (GET, POST, DELETE /:id)
+│   │   │   └── cover-letter.routes.ts # /cover-letters/:id (PATCH), /:id/download (GET)
 │   │   ├── middleware/
 │   │   │   ├── auth.ts            # JWT verification → attaches req.user
 │   │   │   ├── asyncHandler.ts    # Wraps async handlers, passes errors to next()
@@ -62,7 +65,8 @@ jobtracker/
 │   │   │   ├── resume.validator.ts
 │   │   │   ├── application.validator.ts  # createApplicationSchema, updateApplicationSchema, updateStatusSchema
 │   │   │   ├── contact.validator.ts      # createContactSchema, updateContactSchema
-│   │   │   └── tag.validator.ts          # createTagSchema
+│   │   │   ├── tag.validator.ts          # createTagSchema
+│   │   │   └── cover-letter.validator.ts # coverLetterRequestSchema, updateCoverLetterSchema
 │   │   ├── lib/
 │   │   │   ├── prisma.ts          # PrismaClient singleton (uses PrismaPg adapter)
 │   │   │   ├── tokens.ts          # signAccessToken, signRefreshToken, hashToken, verifyAccessToken

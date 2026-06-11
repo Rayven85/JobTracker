@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import * as applicationService from '../services/application.service';
+import * as aiService from '../services/ai.service';
 
 export async function listApplications(req: Request, res: Response) {
   const { status, search, page, limit } = req.query;
@@ -72,4 +73,29 @@ export async function removeTag(req: Request, res: Response) {
     req.params['tagId'] as string
   );
   res.json({ success: true, data: null });
+}
+
+export async function analyzeApplication(req: Request, res: Response) {
+  const analysis = await aiService.analyzeApplication(
+    req.params['id'] as string,
+    req.user!.userId
+  );
+  res.json({ success: true, data: analysis });
+}
+
+export async function generateCoverLetter(req: Request, res: Response) {
+  const coverLetter = await aiService.generateCoverLetter(
+    req.params['id'] as string,
+    req.user!.userId,
+    req.body.tone
+  );
+  res.status(201).json({ success: true, data: coverLetter });
+}
+
+export async function generateInterviewQuestions(req: Request, res: Response) {
+  const interviewPrep = await aiService.generateInterviewQuestions(
+    req.params['id'] as string,
+    req.user!.userId
+  );
+  res.status(201).json({ success: true, data: interviewPrep });
 }
