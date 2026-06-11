@@ -34,22 +34,27 @@ jobtracker/
 ├── server/                        # Express.js API — port 4000 (see server/CLAUDE.md)
 │   ├── src/
 │   │   ├── controllers/
-│   │   │   └── auth.controller.ts
+│   │   │   ├── auth.controller.ts
+│   │   │   └── resume.controller.ts
 │   │   ├── services/
-│   │   │   └── auth.service.ts
+│   │   │   ├── auth.service.ts    # register, login, refresh, logout, getMe, findOrCreateGoogleUser, loginWithGoogle
+│   │   │   └── resume.service.ts
 │   │   ├── routes/
 │   │   │   ├── index.ts           # Mounts all routers, /health endpoint
-│   │   │   └── auth.routes.ts
+│   │   │   ├── auth.routes.ts
+│   │   │   └── resume.routes.ts
 │   │   ├── middleware/
 │   │   │   ├── auth.ts            # JWT verification → attaches req.user
 │   │   │   ├── asyncHandler.ts    # Wraps async handlers, passes errors to next()
 │   │   │   ├── validate.ts        # Zod validation middleware factory
 │   │   │   └── errorHandler.ts    # Global error handler — formats AppError to response
 │   │   ├── validators/
-│   │   │   └── auth.validator.ts
+│   │   │   ├── auth.validator.ts
+│   │   │   └── resume.validator.ts
 │   │   ├── lib/
 │   │   │   ├── prisma.ts          # PrismaClient singleton (uses PrismaPg adapter)
 │   │   │   ├── tokens.ts          # signAccessToken, signRefreshToken, hashToken, verifyAccessToken
+│   │   │   ├── passport.ts        # GoogleStrategy config — normalises req.user to { userId, email }
 │   │   │   ├── s3.ts              # AWS S3Client singleton + helper functions
 │   │   │   ├── ai.ts              # AI client singleton (currently Gemini — swap provider here)
 │   │   │   └── AppError.ts        # Custom error class

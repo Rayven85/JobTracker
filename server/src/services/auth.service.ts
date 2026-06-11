@@ -73,6 +73,28 @@ export async function logout(cookieToken: string | undefined) {
   await prisma.refreshToken.updateMany({ where: { tokenHash }, data: { revoked: true } });
 }
 
+export async function findOrCreateGoogleUser(googleId: string, email: string, name: string, avatarUrl?: string) {
+  let user = await prisma.user.findFirst({ where: { googleId } });
+  if (!user) {
+    const byEmail = await prisma.user.findUnique({ where: { email } });
+    if (byEmail) {
+      // Link Google account to existing email/password account
+      user = await prisma.user.update({
+        where: { id: byEmail.id },
+        data: { googleId, avatarUrl: avatarUrl ?? byEmail.avatarUrl ?? undefined },
+      });
+    } else {
+      user = await prisma.user.create({ data: { googleId, email, name, avatarUrl } });
+    }
+  }
+  return user;
+}
+
+export async function loginWithGoogle(userId: string, email: string) {
+  const { accessToken, rawRefreshToken } = await issueTokenPair(userId, email);
+  return { accessToken, refreshToken: rawRefreshToken };
+}
+
 export async function getMe(userId: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },

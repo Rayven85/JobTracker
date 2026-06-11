@@ -4,6 +4,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import { passport } from './lib/passport';
 import { router } from './routes/index';
 import { errorHandler } from './middleware/errorHandler';
 
@@ -24,6 +25,7 @@ app.use(helmet());
 app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
+app.use(passport.initialize());
 
 if (process.env.NODE_ENV !== 'test') {
   app.use(morgan('dev'));

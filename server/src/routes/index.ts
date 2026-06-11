@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { authRouter } from './auth.routes';
+import { resumeRouter } from './resume.routes';
 
 export const router = Router();
 
@@ -11,3 +12,4 @@ router.get('/health', asyncHandler(async (_req: Request, res: Response) => {
 }));
 
 router.use('/auth', authRouter);
+router.use('/resumes', resumeRouter);
