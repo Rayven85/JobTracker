@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16
+    image: postgres:16-alpine
     environment:
       POSTGRES_DB: jobtracker
       POSTGRES_USER: jobtracker
@@ -8,26 +8,35 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "jobtracker"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   server:
     build: ./server
     volumes:
-      - ./server:/app
-      - /app/node_modules
+      - ./server/src:/app/src
     env_file:
       - ./server/.env
     ports:
       - "4000:4000"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
   client:
     build: ./client
+    volumes:
+      - ./client/src:/app/src
+    env_file:
+      - ./client/.env.local
     ports:
       - "3000:3000"
     depends_on:
       - server
 
 volumes:
-  postgres_data:
+  postgres-data:
