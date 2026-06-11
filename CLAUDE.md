@@ -35,14 +35,23 @@ jobtracker/
 │   ├── src/
 │   │   ├── controllers/
 │   │   │   ├── auth.controller.ts
-│   │   │   └── resume.controller.ts
+│   │   │   ├── resume.controller.ts
+│   │   │   ├── application.controller.ts
+│   │   │   ├── contact.controller.ts
+│   │   │   └── tag.controller.ts
 │   │   ├── services/
 │   │   │   ├── auth.service.ts    # register, login, refresh, logout, getMe, findOrCreateGoogleUser, loginWithGoogle
-│   │   │   └── resume.service.ts
+│   │   │   ├── resume.service.ts
+│   │   │   ├── application.service.ts  # listApplications, createApplication, getApplication, updateApplication, updateStatus, deleteApplication, getEvents, addTag, removeTag
+│   │   │   ├── contact.service.ts      # createContact, updateContact, deleteContact
+│   │   │   └── tag.service.ts          # listTags, createTag, deleteTag
 │   │   ├── routes/
 │   │   │   ├── index.ts           # Mounts all routers, /health endpoint
 │   │   │   ├── auth.routes.ts
-│   │   │   └── resume.routes.ts
+│   │   │   ├── resume.routes.ts
+│   │   │   ├── application.routes.ts  # /applications + nested /:id/tags, /:id/contacts, /:id/events
+│   │   │   ├── contact.routes.ts      # /contacts/:id (PATCH, DELETE)
+│   │   │   └── tag.routes.ts          # /tags (GET, POST, DELETE /:id)
 │   │   ├── middleware/
 │   │   │   ├── auth.ts            # JWT verification → attaches req.user
 │   │   │   ├── asyncHandler.ts    # Wraps async handlers, passes errors to next()
@@ -50,7 +59,10 @@ jobtracker/
 │   │   │   └── errorHandler.ts    # Global error handler — formats AppError to response
 │   │   ├── validators/
 │   │   │   ├── auth.validator.ts
-│   │   │   └── resume.validator.ts
+│   │   │   ├── resume.validator.ts
+│   │   │   ├── application.validator.ts  # createApplicationSchema, updateApplicationSchema, updateStatusSchema
+│   │   │   ├── contact.validator.ts      # createContactSchema, updateContactSchema
+│   │   │   └── tag.validator.ts          # createTagSchema
 │   │   ├── lib/
 │   │   │   ├── prisma.ts          # PrismaClient singleton (uses PrismaPg adapter)
 │   │   │   ├── tokens.ts          # signAccessToken, signRefreshToken, hashToken, verifyAccessToken

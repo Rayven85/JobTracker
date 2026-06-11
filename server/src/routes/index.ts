@@ -3,6 +3,9 @@ import { prisma } from '../lib/prisma';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { authRouter } from './auth.routes';
 import { resumeRouter } from './resume.routes';
+import { applicationRouter } from './application.routes';
+import { contactRouter } from './contact.routes';
+import { tagRouter } from './tag.routes';
 
 export const router = Router();
 
@@ -13,3 +16,6 @@ router.get('/health', asyncHandler(async (_req: Request, res: Response) => {
 
 router.use('/auth', authRouter);
 router.use('/resumes', resumeRouter);
+router.use('/applications', applicationRouter);
+router.use('/contacts', contactRouter);
+router.use('/tags', tagRouter);
