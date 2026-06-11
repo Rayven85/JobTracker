@@ -39,14 +39,16 @@ jobtracker/
 │   │   │   ├── application.controller.ts  # + analyzeApplication, generateCoverLetter, generateInterviewQuestions
 │   │   │   ├── contact.controller.ts
 │   │   │   ├── tag.controller.ts
-│   │   │   └── cover-letter.controller.ts # updateCoverLetter, downloadCoverLetter
+│   │   │   ├── cover-letter.controller.ts # updateCoverLetter, downloadCoverLetter
+│   │   │   └── dashboard.controller.ts    # getStats, getRecentActivity
 │   │   ├── services/
 │   │   │   ├── auth.service.ts    # register, login, refresh, logout, getMe, findOrCreateGoogleUser, loginWithGoogle
 │   │   │   ├── resume.service.ts
 │   │   │   ├── application.service.ts  # listApplications, createApplication, getApplication, updateApplication, updateStatus, deleteApplication, getEvents, addTag, removeTag
 │   │   │   ├── contact.service.ts      # createContact, updateContact, deleteContact
 │   │   │   ├── tag.service.ts          # listTags, createTag, deleteTag
-│   │   │   └── ai.service.ts           # analyzeApplication, generateCoverLetter, generateInterviewQuestions, updateCoverLetter, getCoverLetter
+│   │   │   ├── ai.service.ts           # analyzeApplication, generateCoverLetter, generateInterviewQuestions, updateCoverLetter, getCoverLetter
+│   │   │   └── dashboard.service.ts    # getStats (groupBy + responseRate + avgDaysToResponse), getRecentActivity
 │   │   ├── routes/
 │   │   │   ├── index.ts           # Mounts all routers, /health endpoint
 │   │   │   ├── auth.routes.ts
@@ -54,7 +56,8 @@ jobtracker/
 │   │   │   ├── application.routes.ts  # /applications + nested /:id/tags, /:id/contacts, /:id/events, /:id/analyze, /:id/cover-letter, /:id/interview-prep
 │   │   │   ├── contact.routes.ts      # /contacts/:id (PATCH, DELETE)
 │   │   │   ├── tag.routes.ts          # /tags (GET, POST, DELETE /:id)
-│   │   │   └── cover-letter.routes.ts # /cover-letters/:id (PATCH), /:id/download (GET)
+│   │   │   ├── cover-letter.routes.ts # /cover-letters/:id (PATCH), /:id/download (GET)
+│   │   │   └── dashboard.routes.ts    # /dashboard/stats, /dashboard/recent
 │   │   ├── middleware/
 │   │   │   ├── auth.ts            # JWT verification → attaches req.user
 │   │   │   ├── asyncHandler.ts    # Wraps async handlers, passes errors to next()
