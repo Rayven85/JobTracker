@@ -24,7 +24,32 @@
       "Bash(docker compose up*)",
       "Bash(docker compose down*)",
       "Bash(find . -*)",
-      "Bash(grep -*)"
+      "Bash(grep -*)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} %{redirect_url}\" http://localhost:4000/api/v1/auth/google)",
+      "Bash(git commit -m ' *)",
+      "Bash(sed -n '140,160p' /Users/zhaoxiaorong/Desktop/WORK/JobTracker/docs/implementation-guide.md)",
+      "Bash(sed -n '226,235p' /Users/zhaoxiaorong/Desktop/WORK/JobTracker/docs/implementation-guide.md)",
+      "Bash(sed -n '273,285p' /Users/zhaoxiaorong/Desktop/WORK/JobTracker/docs/implementation-guide.md)",
+      "Bash(sed -n '374,385p' /Users/zhaoxiaorong/Desktop/WORK/JobTracker/docs/implementation-guide.md)",
+      "Bash(sed -n '530,570p' /Users/zhaoxiaorong/Desktop/WORK/JobTracker/docs/implementation-guide.md)",
+      "Bash(psql postgresql://jobtracker:password@localhost:5432/jobtracker_test -c \"SELECT 1\")",
+      "Bash(psql postgresql://jobtracker:password@localhost:5432/jobtracker_test -c \"\\\\dt\")",
+      "Bash(DATABASE_URL=postgresql://jobtracker:password@localhost:5432/jobtracker_test npx prisma migrate deploy)",
+      "Bash(npx ts-jest *)",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/ts-jest/package.json'\\).version\\)\")",
+      "Bash(pg_isready -h localhost -p 5432 -U jobtracker)",
+      "Bash(nc -z localhost 5432)",
+      "Bash(nc -z localhost 4000)",
+      "Bash(nc -z localhost 3000)",
+      "Bash(curl -s http://localhost:4000/api/v1/health)",
+      "Bash(python3 -m json.tool)",
+      "Bash(npm run *)",
+      "Bash(echo \"PID: $!\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/login)",
+      "Bash(pkill -f \"next dev\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/dashboard)",
+      "Bash(git commit *)",
+      "Bash(python3 -c \"import yaml, sys; yaml.safe_load\\(open\\('/Users/zhaoxiaorong/Desktop/WORK/JobTracker/.github/workflows/ci.yml'\\)\\); print\\('YAML valid'\\)\")"
     ]
   }
 }

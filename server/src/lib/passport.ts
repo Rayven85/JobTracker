@@ -4,9 +4,9 @@ import { findOrCreateGoogleUser } from '../services/auth.service';
 
 if (!process.env.GOOGLE_CLIENT_ID) throw new Error('GOOGLE_CLIENT_ID is required');
 if (!process.env.GOOGLE_CLIENT_SECRET) throw new Error('GOOGLE_CLIENT_SECRET is required');
+if (!process.env.SERVER_URL) throw new Error('SERVER_URL is required');
 
-const PORT = process.env.PORT || 4000;
-const CALLBACK_URL = `http://localhost:${PORT}/api/v1/auth/google/callback`;
+const CALLBACK_URL = `${process.env.SERVER_URL}/api/v1/auth/google/callback`;
 
 passport.use(
   new GoogleStrategy(

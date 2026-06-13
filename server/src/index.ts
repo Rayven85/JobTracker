@@ -13,6 +13,7 @@ const REQUIRED_ENV = [
   'JWT_ACCESS_SECRET',
   'JWT_REFRESH_SECRET',
   'CLIENT_URL',
+  'SERVER_URL',
 ];
 
 for (const key of REQUIRED_ENV) {
