@@ -7,6 +7,8 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
+# Generate Prisma client before tsc so @prisma/client types are available
+RUN npx prisma generate
 RUN npm run build
 
 # ── Stage 2: production ──────────────────────────────────────────────────────
@@ -16,6 +18,11 @@ WORKDIR /app
 
 COPY package*.json ./
 RUN npm ci --omit=dev
+
+# Copy generated Prisma engine and client from builder (prisma CLI is devDep,
+# so it's not available here — we copy the already-generated output instead)
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
 
 COPY --from=builder /app/dist ./dist
 
