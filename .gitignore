@@ -22,8 +22,8 @@ npm-debug.log*
 .vscode/
 .idea/
 
-# Prisma
-server/prisma/migrations/
+# Prisma (migrations must be committed — they are needed for production deploys)
+# server/prisma/migrations/
 
 # Test coverage
 coverage/
