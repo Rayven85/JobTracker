@@ -1,6 +1,6 @@
 import { nanoid } from 'nanoid';
-// reason: pdf-parse is CJS-only; esModuleInterop default import doesn't resolve its call signature
-const pdfParse = require('pdf-parse') as (buf: Buffer) => Promise<{ text: string }>;
+import { ExtractionStatus } from '@prisma/client';
+import { PDFParse } from 'pdf-parse';
 import { prisma } from '../lib/prisma';
 import { AppError } from '../lib/AppError';
 import { generatePresignedUploadUrl, deleteS3Object, getS3ObjectBuffer } from '../lib/s3';
@@ -24,7 +24,7 @@ export async function confirmUpload(userId: string, input: ConfirmUploadInput) {
       fileSize: input.fileSize,
       name: input.name,
     },
-    select: { id: true, name: true, fileName: true, fileSize: true, isDefault: true, createdAt: true },
+    select: { id: true, name: true, fileName: true, fileSize: true, isDefault: true, extractionStatus: true, createdAt: true },
   });
 
   // Fire-and-forget — do not await
@@ -36,13 +36,28 @@ export async function confirmUpload(userId: string, input: ConfirmUploadInput) {
 export async function extractAndSaveText(resumeId: string, s3Key: string): Promise<void> {
   try {
     const buffer = await getS3ObjectBuffer(s3Key);
-    const { text } = await pdfParse(buffer);
+    const parser = new PDFParse({ data: buffer });
+    let text: string;
+    try {
+      ({ text } = await parser.getText());
+    } finally {
+      await parser.destroy();
+    }
+    const hasText = text.trim().length > 0;
     await prisma.resume.update({
       where: { id: resumeId },
-      data: { parsedText: text },
+      data: { parsedText: text, extractionStatus: hasText ? ExtractionStatus.READY : ExtractionStatus.EMPTY },
     });
+    if (hasText) {
+      console.log(`[resume] PDF text extracted for ${resumeId} (${text.length} chars)`);
+    } else {
+      console.warn(`[resume] PDF extraction produced no text for ${resumeId} — likely a scanned/image-only PDF`);
+    }
   } catch (err) {
     console.error(`[resume] PDF extraction failed for ${resumeId}:`, err);
+    await prisma.resume
+      .update({ where: { id: resumeId }, data: { extractionStatus: ExtractionStatus.FAILED } })
+      .catch(e => console.error(`[resume] could not mark ${resumeId} as FAILED:`, e));
   }
 }
 
@@ -56,6 +71,7 @@ export async function listResumes(userId: string) {
       fileSize: true,
       isDefault: true,
       parsedText: true,
+      extractionStatus: true,
       createdAt: true,
     },
     orderBy: { createdAt: 'desc' },

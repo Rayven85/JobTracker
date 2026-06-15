@@ -9,7 +9,7 @@ interface ApplicationCardProps {
 }
 
 export function ApplicationCard({ application }: ApplicationCardProps) {
-  const { id, jobTitle, companyName, status, location, appliedDate, matchScore, tags } = application
+  const { id, jobTitle, companyName, status, location, appliedDate, matchScore, tags = [] } = application
 
   return (
     <Link href={`/applications/${id}`} className="block group">

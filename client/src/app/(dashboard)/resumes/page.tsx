@@ -1,15 +1,44 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { Upload, Trash2, Star, FileText, Loader2, CheckCircle2 } from 'lucide-react'
+import { Upload, Trash2, Star, FileText, Loader2, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { listResumes, getPresignedUrl, uploadToS3, confirmUpload, setDefaultResume, deleteResume } from '@/lib/api/resumes'
-import type { Resume } from '@/types'
+import type { Resume, ExtractionStatus } from '@/types'
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / 1048576).toFixed(1)} MB`
+}
+
+function ExtractionPill({ status }: { status: ExtractionStatus }) {
+  switch (status) {
+    case 'READY':
+      return (
+        <span className="text-emerald-600 inline-flex items-center gap-1">
+          <CheckCircle2 size={11} /> Text extracted
+        </span>
+      )
+    case 'EMPTY':
+      return (
+        <span className="text-amber-600 inline-flex items-center gap-1">
+          <AlertTriangle size={11} /> No text found
+        </span>
+      )
+    case 'FAILED':
+      return (
+        <span className="text-destructive inline-flex items-center gap-1">
+          <XCircle size={11} /> Extraction failed
+        </span>
+      )
+    default:
+      return (
+        <span className="text-amber-600 inline-flex items-center gap-1">
+          <Loader2 size={11} className="animate-spin" /> Processing…
+        </span>
+      )
+  }
 }
 
 export default function ResumesPage() {
@@ -25,6 +54,25 @@ export default function ResumesPage() {
       .catch(() => toast.error('Failed to load resumes'))
       .finally(() => setIsLoading(false))
   }, [])
+
+  // PDF text extraction runs in the background after upload. While any resume is
+  // still PENDING, poll for updates — capped so a stuck file doesn't poll forever.
+  const hasProcessing = resumes.some(r => r.extractionStatus === 'PENDING')
+  useEffect(() => {
+    if (!hasProcessing) return
+    let attempts = 0
+    const interval = setInterval(async () => {
+      attempts += 1
+      try {
+        const fresh = await listResumes()
+        setResumes(fresh)
+        if (!fresh.some(r => r.extractionStatus === 'PENDING') || attempts >= 10) clearInterval(interval)
+      } catch {
+        if (attempts >= 10) clearInterval(interval)
+      }
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [hasProcessing])
 
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -144,15 +192,7 @@ export default function ResumesPage() {
                 <p className="text-xs text-muted-foreground">
                   {new Date(resume.createdAt).toLocaleDateString('en-NZ', { dateStyle: 'medium' })}
                   {' · '}
-                  {resume.parsedText ? (
-                    <span className="text-emerald-600 inline-flex items-center gap-1">
-                      <CheckCircle2 size={11} /> Text extracted
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-amber-600">
-                      <Loader2 size={11} className="animate-spin" /> Processing…
-                    </span>
-                  )}
+                  <ExtractionPill status={resume.extractionStatus} />
                 </p>
               </div>
               <div className="flex items-center gap-1 shrink-0">

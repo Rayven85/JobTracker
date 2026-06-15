@@ -68,12 +68,18 @@ export interface AIAnalysis {
   suggestions: string[]
 }
 
+export type ExtractionStatus = 'PENDING' | 'READY' | 'EMPTY' | 'FAILED'
+
 export interface Resume {
   id: string
   name: string
   fileName: string
   fileSize: number
-  parsedText: string | null
+  // Lifecycle of background PDF text extraction. Drives the status pill on the resumes page.
+  extractionStatus: ExtractionStatus
+  // The list endpoint returns a 200-char preview (null until extraction finishes).
+  // Absent on the confirm-upload response, hence optional.
+  parsedTextPreview?: string | null
   isDefault: boolean
   createdAt: string
 }

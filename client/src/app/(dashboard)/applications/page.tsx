@@ -60,7 +60,7 @@ export default function ApplicationsPage() {
       status: data.status,
       location: data.location || undefined,
       employmentType: data.employmentType || undefined,
-      remote: data.remote,
+      isRemote: data.remote,
       appliedDate: data.appliedDate || undefined,
       jobUrl: data.jobUrl || undefined,
       jobDescription: data.jobDescription || undefined,

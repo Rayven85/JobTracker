@@ -40,7 +40,7 @@ export interface CreateApplicationData {
   status?: ApplicationStatus
   location?: string
   employmentType?: string
-  remote?: boolean
+  isRemote?: boolean
   appliedDate?: string
   deadline?: string
   jobDescription?: string

@@ -5,8 +5,16 @@ import { X, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ApplicationStatus, Resume } from '@/types'
 import { ALL_STATUSES, STATUS_LABELS } from '@/lib/status'
+import { LocationCombobox } from './LocationCombobox'
 
-const EMPLOYMENT_TYPES = ['Full Time', 'Part Time', 'Contract', 'Internship', 'Graduate']
+// value must match the server's employmentType enum; label is what the user sees
+const EMPLOYMENT_TYPES: { value: string; label: string }[] = [
+  { value: 'FULL_TIME', label: 'Full Time' },
+  { value: 'PART_TIME', label: 'Part Time' },
+  { value: 'CONTRACT', label: 'Contract' },
+  { value: 'INTERNSHIP', label: 'Internship' },
+  { value: 'GRADUATE', label: 'Graduate' },
+]
 
 interface ApplicationFormProps {
   onSubmit: (data: FormData) => Promise<void>
@@ -107,7 +115,7 @@ export function ApplicationForm({ onSubmit, onClose, resumes = [] }: Application
               <label className="block text-xs font-medium text-foreground mb-1.5">Employment Type</label>
               <select value={form.employmentType} onChange={e => set('employmentType', e.target.value)} className={inputCls}>
                 <option value="">Select…</option>
-                {EMPLOYMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                {EMPLOYMENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
           </div>
@@ -115,7 +123,7 @@ export function ApplicationForm({ onSubmit, onClose, resumes = [] }: Application
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-foreground mb-1.5">Location</label>
-              <input value={form.location} onChange={e => set('location', e.target.value)} placeholder="Auckland, NZ" className={inputCls} />
+              <LocationCombobox value={form.location} onChange={v => set('location', v)} placeholder="Auckland, NZ" />
             </div>
             <div>
               <label className="block text-xs font-medium text-foreground mb-1.5">Applied Date</label>

@@ -43,6 +43,13 @@ model RefreshToken {
 
 // ─── RESUMES ────────────────────────────────────────────────────────────────
 
+enum ExtractionStatus {
+  PENDING // upload confirmed, PDF text extraction not yet finished
+  READY   // text extracted successfully
+  EMPTY   // extraction succeeded but produced no text (scanned/image-only PDF)
+  FAILED  // extraction threw (S3 fetch or PDF parse error)
+}
+
 model Resume {
   id         String   @id @default(uuid())
   userId     String
@@ -53,6 +60,7 @@ model Resume {
   fileName   String
   fileSize   Int      // bytes
   parsedText String?  @db.Text // extracted PDF text used in AI prompts
+  extractionStatus ExtractionStatus @default(PENDING)
   isDefault  Boolean  @default(false)
 
   createdAt  DateTime @default(now())

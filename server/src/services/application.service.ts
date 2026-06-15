@@ -75,11 +75,16 @@ export async function createApplication(userId: string, input: CreateApplication
   return prisma.$transaction(async (tx) => {
     const application = await tx.application.create({
       data: { ...input, userId },
+      include: {
+        resume: { select: { id: true, name: true } },
+        tags: { select: { tag: { select: { id: true, name: true, color: true } } } },
+      },
     });
     await tx.applicationEvent.create({
       data: { applicationId: application.id, eventType: 'CREATED' },
     });
-    return application;
+    // Flatten tags to match the list/get response shape (tags: Tag[])
+    return { ...application, tags: application.tags.map(t => t.tag) };
   });
 }
 
