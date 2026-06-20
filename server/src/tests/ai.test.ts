@@ -3,21 +3,18 @@ import { app } from '../index';
 import { prisma } from '../lib/prisma';
 import { signAccessToken } from '../lib/tokens';
 
-// ─── Mock Gemini ──────────────────────────────────────────────────────────────
-// generateContent is created inside the factory to avoid TDZ — the const
-// variable would be uninitialized when jest.mock() hoists and runs the factory.
+// ─── Mock Groq SDK ─────────────────────────────────────────────────────────────
+// Factory uses _create so jest.mock hoisting doesn't hit TDZ on the const.
 
-jest.mock('@google/generative-ai', () => {
-  const generateContent = jest.fn();
-  const GoogleGenerativeAI = jest.fn().mockImplementation(() => ({
-    getGenerativeModel: jest.fn().mockReturnValue({ generateContent }),
+jest.mock('groq-sdk', () => {
+  const create = jest.fn();
+  const Groq = jest.fn().mockImplementation(() => ({
+    chat: { completions: { create } },
   }));
-  return { GoogleGenerativeAI, _generateContent: generateContent };
+  return { default: Groq, _create: create };
 });
 
-const { _generateContent: mockGenerateContent } = jest.requireMock(
-  '@google/generative-ai'
-) as { _generateContent: jest.Mock };
+const { _create: mockCreate } = jest.requireMock('groq-sdk') as { _create: jest.Mock };
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -72,16 +69,22 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
-  mockGenerateContent.mockReset();
+  mockCreate.mockReset();
 });
+
+function groqJSON(obj: unknown) {
+  return { choices: [{ message: { content: JSON.stringify(obj) } }] };
+}
+
+function groqText(text: string) {
+  return { choices: [{ message: { content: text } }] };
+}
 
 // ─── analyzeApplication ────────────────────────────────────────────────────────
 
 describe('POST /api/v1/applications/:id/analyze', () => {
   it('returns 500 AI_PARSE_ERROR when AI returns invalid JSON', async () => {
-    mockGenerateContent.mockResolvedValueOnce({
-      response: { text: () => 'not valid json {{' },
-    });
+    mockCreate.mockResolvedValueOnce(groqText('not valid json {{'));
 
     const res = await request(app)
       .post(`/api/v1/applications/${applicationId}/analyze`)
@@ -92,16 +95,12 @@ describe('POST /api/v1/applications/:id/analyze', () => {
   });
 
   it('returns correct shape and updates Application row', async () => {
-    mockGenerateContent.mockResolvedValueOnce({
-      response: {
-        text: () => JSON.stringify({
-          score: 85,
-          matched: ['TypeScript', 'React'],
-          missing: ['Kubernetes'],
-          suggestions: ['Add container deployment experience'],
-        }),
-      },
-    });
+    mockCreate.mockResolvedValueOnce(groqJSON({
+      score: 85,
+      matched: ['TypeScript', 'React'],
+      missing: ['Kubernetes'],
+      suggestions: ['Add container deployment experience'],
+    }));
 
     const res = await request(app)
       .post(`/api/v1/applications/${applicationId}/analyze`)
@@ -132,12 +131,9 @@ describe('POST /api/v1/applications/:id/analyze', () => {
 
 describe('POST /api/v1/applications/:id/cover-letter', () => {
   it('creates CoverLetter row with isActive: true', async () => {
-    mockGenerateContent.mockResolvedValueOnce({
-      response: {
-        text: () =>
-          'Dear Hiring Manager,\n\nI am excited to apply.\n\nSincerely,\nAI Tester',
-      },
-    });
+    mockCreate.mockResolvedValueOnce(
+      groqText('Dear Hiring Manager,\n\nI am excited to apply.\n\nSincerely,\nAI Tester')
+    );
 
     const res = await request(app)
       .post(`/api/v1/applications/${applicationId}/cover-letter`)
@@ -155,9 +151,7 @@ describe('POST /api/v1/applications/:id/cover-letter', () => {
   });
 
   it('sets previous cover letter isActive to false when new letter is generated', async () => {
-    mockGenerateContent.mockResolvedValueOnce({
-      response: { text: () => 'First version of the cover letter.' },
-    });
+    mockCreate.mockResolvedValueOnce(groqText('First version of the cover letter.'));
     const firstRes = await request(app)
       .post(`/api/v1/applications/${applicationId}/cover-letter`)
       .set('Authorization', `Bearer ${token}`)
@@ -165,9 +159,7 @@ describe('POST /api/v1/applications/:id/cover-letter', () => {
     expect(firstRes.status).toBe(201);
     const firstId: string = firstRes.body.data.id;
 
-    mockGenerateContent.mockResolvedValueOnce({
-      response: { text: () => 'Second version of the cover letter.' },
-    });
+    mockCreate.mockResolvedValueOnce(groqText('Second version of the cover letter.'));
     const secondRes = await request(app)
       .post(`/api/v1/applications/${applicationId}/cover-letter`)
       .set('Authorization', `Bearer ${token}`)
@@ -200,9 +192,7 @@ describe('POST /api/v1/applications/:id/interview-prep', () => {
       tips: `Tip ${i + 1}`,
     }));
 
-    mockGenerateContent.mockResolvedValueOnce({
-      response: { text: () => JSON.stringify({ questions }) },
-    });
+    mockCreate.mockResolvedValueOnce(groqJSON({ questions }));
 
     const res = await request(app)
       .post(`/api/v1/applications/${applicationId}/interview-prep`)

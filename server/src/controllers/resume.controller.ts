@@ -32,6 +32,11 @@ export async function deleteResume(req: Request, res: Response) {
   res.json({ success: true, data: null });
 }
 
+export async function updateParsedText(req: Request, res: Response) {
+  const result = await resumeService.updateParsedText(req.params['id'] as string, req.user!.userId, req.body.parsedText);
+  res.json({ success: true, data: result });
+}
+
 export async function setDefault(req: Request, res: Response) {
   const resume = await resumeService.setDefault(req.params['id'] as string, req.user!.userId);
   res.json({ success: true, data: resume });

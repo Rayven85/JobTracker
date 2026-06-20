@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, BriefcaseBusiness, FileText, LogOut, Loader2, Palette } from 'lucide-react'
+import { LayoutDashboard, BriefcaseBusiness, FileText, UserCircle, LogOut, Loader2, Palette } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/applications', label: 'Applications', icon: BriefcaseBusiness },
   { href: '/resumes', label: 'Resumes', icon: FileText },
+  { href: '/profile', label: 'Profile', icon: UserCircle },
 ]
 
 export function Sidebar() {

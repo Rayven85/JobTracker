@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { validate } from '../middleware/validate';
-import { presignedUrlSchema, confirmUploadSchema, updateResumeSchema } from '../validators/resume.validator';
+import { presignedUrlSchema, confirmUploadSchema, updateResumeSchema, updateParsedTextSchema } from '../validators/resume.validator';
 import * as resumeController from '../controllers/resume.controller';
 
 export const resumeRouter = Router();
@@ -15,4 +15,5 @@ resumeRouter.post('/confirm', validate(confirmUploadSchema), asyncHandler(resume
 resumeRouter.get('/:id', asyncHandler(resumeController.getResume));
 resumeRouter.patch('/:id', validate(updateResumeSchema), asyncHandler(resumeController.updateResume));
 resumeRouter.delete('/:id', asyncHandler(resumeController.deleteResume));
+resumeRouter.patch('/:id/parsed-text', validate(updateParsedTextSchema), asyncHandler(resumeController.updateParsedText));
 resumeRouter.post('/:id/set-default', asyncHandler(resumeController.setDefault));

@@ -4,6 +4,7 @@ import { PDFParse } from 'pdf-parse';
 import { prisma } from '../lib/prisma';
 import { AppError } from '../lib/AppError';
 import { generatePresignedUploadUrl, deleteS3Object, getS3ObjectBuffer } from '../lib/s3';
+import { extractProfileFromResume } from './ai.service';
 import type { ConfirmUploadInput } from '../validators/resume.validator';
 
 export async function getPresignedUrl(userId: string, fileName: string, contentType: string) {
@@ -50,6 +51,9 @@ export async function extractAndSaveText(resumeId: string, s3Key: string): Promi
     });
     if (hasText) {
       console.log(`[resume] PDF text extracted for ${resumeId} (${text.length} chars)`);
+      extractAndSaveProfile(resumeId, text).catch(err =>
+        console.error(`[resume] AI profile extraction failed for ${resumeId}:`, err)
+      );
     } else {
       console.warn(`[resume] PDF extraction produced no text for ${resumeId} — likely a scanned/image-only PDF`);
     }
@@ -108,6 +112,28 @@ export async function deleteResume(resumeId: string, userId: string) {
 
   await prisma.resume.delete({ where: { id: resumeId } });
   await deleteS3Object(resume.s3Key);
+}
+
+export async function updateParsedText(resumeId: string, userId: string, parsedText: string) {
+  const resume = await prisma.resume.findUnique({ where: { id: resumeId } });
+  if (!resume) throw new AppError(404, 'RESUME_NOT_FOUND', 'Resume not found');
+  if (resume.userId !== userId) throw new AppError(403, 'FORBIDDEN', 'Access denied');
+
+  const status = parsedText.trim().length > 0 ? ExtractionStatus.READY : ExtractionStatus.EMPTY;
+  return prisma.resume.update({
+    where: { id: resumeId },
+    data: { parsedText, extractionStatus: status },
+    select: { id: true, parsedText: true, extractionStatus: true },
+  });
+}
+
+async function extractAndSaveProfile(resumeId: string, parsedText: string): Promise<void> {
+  const extracted = await extractProfileFromResume(parsedText);
+  await prisma.resume.update({
+    where: { id: resumeId },
+    data: { extractedData: extracted as object },
+  });
+  console.log(`[resume] AI profile extracted for ${resumeId}`);
 }
 
 export async function setDefault(resumeId: string, userId: string) {

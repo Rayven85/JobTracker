@@ -80,6 +80,20 @@ export interface Resume {
   // The list endpoint returns a 200-char preview (null until extraction finishes).
   // Absent on the confirm-upload response, hence optional.
   parsedTextPreview?: string | null
+  // Full text — only present on GET /resumes/:id, not on list responses.
+  parsedText?: string | null
+  // AI-structured data — only present on GET /resumes/:id after AI extraction completes.
+  extractedData?: {
+    name: string | null
+    email: string | null
+    phone: string | null
+    location: string | null
+    summary: string | null
+    skills: string[]
+    education: ProfileEducation[]
+    experience: ProfileExperience[]
+    certifications: ProfileCertification[]
+  } | null
   isDefault: boolean
   createdAt: string
 }
@@ -128,4 +142,54 @@ export interface RecentActivityItem {
     companyName: string
     jobTitle: string
   }
+}
+
+// ─── Profile ──────────────────────────────────────────────────────────────────
+
+export interface ProfileEducation {
+  institution: string
+  degree: string
+  field: string | null
+  startYear: number | null
+  endYear: number | null
+}
+
+export interface ProfileExperience {
+  company: string
+  title: string
+  location: string | null
+  startDate: string | null
+  endDate: string | null
+  current: boolean
+  description: string
+}
+
+export interface ProfileCertification {
+  name: string
+  issuer: string | null
+  year: number | null
+}
+
+export interface ProfileSuggestion {
+  resumeId: string
+  resumeName: string
+  newSkills: string[]
+  newExperience: ProfileExperience[]
+  newEducation: ProfileEducation[]
+  newCertifications: ProfileCertification[]
+}
+
+export interface UserProfile {
+  id: string
+  name: string | null
+  email: string | null
+  phone: string | null
+  location: string | null
+  summary: string | null
+  skills: string[]
+  education: ProfileEducation[]
+  experience: ProfileExperience[]
+  certifications: ProfileCertification[]
+  updatedAt: string
+  suggestions: ProfileSuggestion[]
 }

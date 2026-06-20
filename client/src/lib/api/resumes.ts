@@ -61,3 +61,19 @@ export async function deleteResume(id: string): Promise<void> {
     throw new Error(json.error?.message ?? 'Failed to delete resume')
   }
 }
+
+export async function getResume(id: string): Promise<Resume> {
+  const res = await apiFetch(`/api/v1/resumes/${id}`)
+  const json = await res.json()
+  if (!json.success) throw new Error(json.error?.message ?? 'Failed to fetch resume')
+  return json.data as Resume
+}
+
+export async function updateParsedText(id: string, parsedText: string): Promise<void> {
+  const res = await apiFetch(`/api/v1/resumes/${id}/parsed-text`, {
+    method: 'PATCH',
+    body: JSON.stringify({ parsedText }),
+  })
+  const json = await res.json()
+  if (!json.success) throw new Error(json.error?.message ?? 'Failed to update text')
+}

@@ -1,6 +1,18 @@
-import { genAI } from '../lib/ai';
+import { generateJSON, generateText } from '../lib/ai';
 import { prisma } from '../lib/prisma';
 import { AppError } from '../lib/AppError';
+
+export interface ExtractedProfile {
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  location: string | null;
+  summary: string | null;
+  skills: string[];
+  education: { institution: string; degree: string; field: string | null; startYear: number | null; endYear: number | null }[];
+  experience: { company: string; title: string; location: string | null; startDate: string | null; endDate: string | null; current: boolean; description: string }[];
+  certifications: { name: string; issuer: string | null; year: number | null }[];
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -26,15 +38,11 @@ async function getApplicationWithResume(applicationId: string, userId: string) {
   return application as typeof application & { resume: { parsedText: string } };
 }
 
-// ─── Pure AI calls (signatures match CLAUDE.md — swap provider by editing ai.ts only) ──
+// ─── Pure AI calls (swap provider by editing ai.ts only — do not touch these) ──
 
 async function callAnalyze(resumeText: string, jobDescription: string) {
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
-    generationConfig: { responseMimeType: 'application/json' },
-  });
-
-  const prompt = `You are an expert technical recruiter helping a candidate assess their job application fit.
+  return generateJSON<{ score: number; matched: string[]; missing: string[]; suggestions: string[] }>(
+    `You are an expert technical recruiter helping a candidate assess their job application fit.
 
 CANDIDATE RESUME:
 ${resumeText}
@@ -42,25 +50,14 @@ ${resumeText}
 JOB DESCRIPTION:
 ${jobDescription}
 
-Analyze the match and return JSON in this exact format:
+Analyze the match and return JSON with exactly these keys:
 {
   "score": <integer 0-100 representing overall fit>,
   "matched": [<keywords/skills present in both resume and JD>],
   "missing": [<important keywords/skills in JD not in resume>],
   "suggestions": [<specific, actionable resume improvement suggestions>]
-}`;
-
-  const result = await model.generateContent(prompt);
-  try {
-    return JSON.parse(result.response.text()) as {
-      score: number;
-      matched: string[];
-      missing: string[];
-      suggestions: string[];
-    };
-  } catch {
-    throw new AppError(500, 'AI_PARSE_ERROR', 'AI response could not be parsed');
-  }
+}`
+  );
 }
 
 async function callCoverLetter(
@@ -71,9 +68,8 @@ async function callCoverLetter(
   jobTitle: string,
   tone?: string
 ) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
-  const prompt = `Write a professional cover letter for ${applicantName} applying for ${jobTitle} at ${companyName}.
+  return generateText(
+    `Write a professional cover letter for ${applicantName} applying for ${jobTitle} at ${companyName}.
 ${tone ? `Tone: ${tone}.` : ''}
 
 CANDIDATE RESUME:
@@ -87,23 +83,13 @@ Instructions:
 - Reference specific skills and experiences from the resume that match the job description
 - Do NOT invent experience not present in the resume
 - Format: "Dear Hiring Manager," opening, 3 body paragraphs, "Sincerely,\\n${applicantName}" closing
-- Return plain text only, no markdown`;
-
-  const result = await model.generateContent(prompt);
-  return result.response.text();
+- Return plain text only, no markdown`
+  );
 }
 
-async function callInterviewQuestions(
-  resumeText: string,
-  jobDescription: string,
-  companyName: string
-) {
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
-    generationConfig: { responseMimeType: 'application/json' },
-  });
-
-  const prompt = `You are a senior technical interviewer preparing a candidate for an interview at ${companyName}.
+async function callInterviewQuestions(resumeText: string, jobDescription: string, companyName: string) {
+  return generateJSON<{ questions: Array<{ question: string; category: string; tips: string }> }>(
+    `You are a senior technical interviewer preparing a candidate for an interview at ${companyName}.
 
 CANDIDATE RESUME:
 ${resumeText}
@@ -112,25 +98,33 @@ JOB DESCRIPTION:
 ${jobDescription}
 
 Generate exactly 8 interview questions: 3 technical, 3 behavioral, 2 company-specific.
-Return JSON in this exact format:
+Return JSON with exactly this shape:
 {
   "questions": [
-    {
-      "question": "<the interview question>",
-      "category": "<technical|behavioral|company>",
-      "tips": "<specific, actionable tips for answering this question>"
-    }
+    { "question": "...", "category": "technical|behavioral|company", "tips": "..." }
   ]
-}`;
+}`
+  );
+}
 
-  const result = await model.generateContent(prompt);
-  try {
-    return JSON.parse(result.response.text()) as {
-      questions: Array<{ question: string; category: string; tips: string }>;
-    };
-  } catch {
-    throw new AppError(500, 'AI_PARSE_ERROR', 'AI response could not be parsed');
-  }
+async function callExtractProfile(parsedText: string) {
+  return generateJSON<ExtractedProfile>(
+    `Extract structured profile information from this resume. Return JSON with exactly this shape:
+{
+  "name": "full name or null",
+  "email": "email address or null",
+  "phone": "phone number or null",
+  "location": "city and/or country or null",
+  "summary": "professional summary in 2-3 sentences or null",
+  "skills": ["skill1", "skill2"],
+  "education": [{ "institution": "...", "degree": "...", "field": "... or null", "startYear": 2018, "endYear": 2022 }],
+  "experience": [{ "company": "...", "title": "...", "location": "... or null", "startDate": "2020-01 or null", "endDate": "2023-06 or null", "current": false, "description": "..." }],
+  "certifications": [{ "name": "...", "issuer": "... or null", "year": 2021 }]
+}
+
+Resume text:
+${parsedText}`
+  );
 }
 
 // ─── Public service methods ───────────────────────────────────────────────────
@@ -249,4 +243,8 @@ export async function getCoverLetter(coverLetterId: string, userId: string) {
   if (coverLetter.application.userId !== userId) throw new AppError(403, 'FORBIDDEN', 'Access denied');
 
   return coverLetter;
+}
+
+export async function extractProfileFromResume(parsedText: string): Promise<ExtractedProfile> {
+  return callExtractProfile(parsedText);
 }

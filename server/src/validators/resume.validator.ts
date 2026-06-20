@@ -16,6 +16,11 @@ export const updateResumeSchema = z.object({
   name: z.string().min(1, 'Resume name is required'),
 });
 
+export const updateParsedTextSchema = z.object({
+  parsedText: z.string(),
+});
+
 export type PresignedUrlInput = z.infer<typeof presignedUrlSchema>;
 export type ConfirmUploadInput = z.infer<typeof confirmUploadSchema>;
 export type UpdateResumeInput = z.infer<typeof updateResumeSchema>;
+export type UpdateParsedTextInput = z.infer<typeof updateParsedTextSchema>;

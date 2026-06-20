@@ -24,6 +24,7 @@ model User {
   refreshTokens RefreshToken[]
   tags          Tag[]
   contacts      Contact[]
+  profile       UserProfile?
 
   @@map("users")
 }
@@ -59,7 +60,8 @@ model Resume {
   s3Key      String   @unique
   fileName   String
   fileSize   Int      // bytes
-  parsedText String?  @db.Text // extracted PDF text used in AI prompts
+  parsedText    String?  @db.Text // extracted PDF text used in AI prompts
+  extractedData Json?             // AI-structured profile data extracted from this resume
   extractionStatus ExtractionStatus @default(PENDING)
   isDefault  Boolean  @default(false)
 
@@ -245,6 +247,33 @@ model Tag {
 
   @@unique([userId, name])
   @@map("tags")
+}
+
+// ─── USER PROFILE ────────────────────────────────────────────────────────────
+
+model UserProfile {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name     String?
+  email    String?
+  phone    String?
+  location String?
+  summary  String? @db.Text
+
+  skills         Json @default("[]") // string[]
+  education      Json @default("[]") // { institution, degree, field, startYear, endYear }[]
+  experience     Json @default("[]") // { company, title, location, startDate, endDate, current, description }[]
+  certifications Json @default("[]") // { name, issuer, year }[]
+
+  // IDs of resumes whose extractedData has already been reviewed (accepted or dismissed)
+  syncedResumeIds Json @default("[]") // string[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("user_profiles")
 }
 
 model ApplicationTag {
