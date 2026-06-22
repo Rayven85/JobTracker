@@ -98,6 +98,9 @@ export interface Resume {
   createdAt: string
 }
 
+// The non-null shape of Resume.extractedData — same fields as the editable parts of UserProfile.
+export type ExtractedData = NonNullable<Resume['extractedData']>
+
 export interface Application {
   id: string
   companyName: string
@@ -179,6 +182,22 @@ export interface ProfileSuggestion {
   newCertifications: ProfileCertification[]
 }
 
+// Phase 2 smart merge: an AI-detected pairing between an existing profile experience
+// and an incoming (new) experience that describe the same role/project.
+export interface ExperienceMergeMatch {
+  existingIndex: number   // index into the profile's experience[]
+  incomingIndex: number   // index into the suggestion's newExperience[]
+  confidence: number      // 0..1
+  reason: string
+  merged: ProfileExperience
+}
+
+export interface SyncPlan {
+  suggestion: ProfileSuggestion | null
+  merges: ExperienceMergeMatch[]
+  existingExperience: ProfileExperience[]
+}
+
 export interface UserProfile {
   id: string
   name: string | null
@@ -191,5 +210,5 @@ export interface UserProfile {
   experience: ProfileExperience[]
   certifications: ProfileCertification[]
   updatedAt: string
-  suggestions: ProfileSuggestion[]
+  suggestions?: ProfileSuggestion[]
 }

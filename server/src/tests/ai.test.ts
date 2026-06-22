@@ -11,7 +11,7 @@ jest.mock('groq-sdk', () => {
   const Groq = jest.fn().mockImplementation(() => ({
     chat: { completions: { create } },
   }));
-  return { default: Groq, _create: create };
+  return { __esModule: true, default: Groq, _create: create };
 });
 
 const { _create: mockCreate } = jest.requireMock('groq-sdk') as { _create: jest.Mock };

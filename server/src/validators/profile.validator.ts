@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const educationSchema = z.object({
+export const educationSchema = z.object({
   institution: z.string().min(1),
   degree: z.string().min(1),
   field: z.string().nullable().optional(),
@@ -8,7 +8,7 @@ const educationSchema = z.object({
   endYear: z.number().int().nullable().optional(),
 });
 
-const experienceSchema = z.object({
+export const experienceSchema = z.object({
   company: z.string().min(1),
   title: z.string().min(1),
   location: z.string().nullable().optional(),
@@ -18,7 +18,7 @@ const experienceSchema = z.object({
   description: z.string().optional(),
 });
 
-const certificationSchema = z.object({
+export const certificationSchema = z.object({
   name: z.string().min(1),
   issuer: z.string().nullable().optional(),
   year: z.number().int().nullable().optional(),
@@ -41,6 +41,10 @@ export const syncResumeSchema = z.object({
   education: z.array(educationSchema).default([]),
   experience: z.array(experienceSchema).default([]),
   certifications: z.array(certificationSchema).default([]),
+  // Phase 2: overwrite an existing profile experience (by index) with a smart-merged entry
+  experienceMerges: z
+    .array(z.object({ existingIndex: z.number().int().nonnegative(), merged: experienceSchema }))
+    .default([]),
 });
 
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;

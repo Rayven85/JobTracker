@@ -1,5 +1,5 @@
 import { apiFetch } from './client'
-import type { UserProfile } from '@/types'
+import type { UserProfile, SyncPlan, ExperienceMergeMatch } from '@/types'
 
 export async function getProfile(): Promise<UserProfile> {
   const res = await apiFetch('/api/v1/profile')
@@ -23,6 +23,7 @@ export async function syncResume(resumeId: string, accepted: {
   education: UserProfile['education']
   experience: UserProfile['experience']
   certifications: UserProfile['certifications']
+  experienceMerges?: { existingIndex: number; merged: UserProfile['experience'][number] }[]
 }): Promise<UserProfile> {
   const res = await apiFetch(`/api/v1/profile/sync/${resumeId}`, {
     method: 'POST',
@@ -32,6 +33,16 @@ export async function syncResume(resumeId: string, accepted: {
   if (!json.success) throw new Error(json.error?.message ?? 'Failed to sync resume')
   return json.data as UserProfile
 }
+
+// Phase 2: AI-detected merge plan (which incoming experiences match existing profile entries).
+export async function getSyncPlan(resumeId: string): Promise<SyncPlan> {
+  const res = await apiFetch(`/api/v1/profile/sync-plan/${resumeId}`, { method: 'POST', body: '{}' })
+  const json = await res.json()
+  if (!json.success) throw new Error(json.error?.message ?? 'Failed to compute sync plan')
+  return json.data as SyncPlan
+}
+
+export type { ExperienceMergeMatch }
 
 export async function buildProfile(): Promise<UserProfile> {
   const res = await apiFetch('/api/v1/profile/build', { method: 'POST', body: '{}' })

@@ -1,5 +1,5 @@
 import { apiFetch } from './client'
-import type { Resume } from '@/types'
+import type { Resume, ExtractedData, ProfileSuggestion } from '@/types'
 
 export async function listResumes(): Promise<Resume[]> {
   const res = await apiFetch('/api/v1/resumes')
@@ -76,4 +76,27 @@ export async function updateParsedText(id: string, parsedText: string): Promise<
   })
   const json = await res.json()
   if (!json.success) throw new Error(json.error?.message ?? 'Failed to update text')
+}
+
+type ExtractedDataResult = {
+  resume: Pick<Resume, 'id' | 'name' | 'extractedData' | 'extractionStatus'>
+  suggestion: ProfileSuggestion | null
+}
+
+export async function updateExtractedData(id: string, data: ExtractedData): Promise<ExtractedDataResult> {
+  const res = await apiFetch(`/api/v1/resumes/${id}/extracted-data`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  })
+  const json = await res.json()
+  if (!json.success) throw new Error(json.error?.message ?? 'Failed to update resume data')
+  return json.data
+}
+
+// Re-run AI extraction on the resume's stored text, overwriting extractedData.
+export async function reExtractResume(id: string): Promise<ExtractedDataResult> {
+  const res = await apiFetch(`/api/v1/resumes/${id}/re-extract`, { method: 'POST' })
+  const json = await res.json()
+  if (!json.success) throw new Error(json.error?.message ?? 'Failed to re-extract')
+  return json.data
 }

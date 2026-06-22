@@ -22,6 +22,7 @@ jobtracker/
 │   │   │   ├── ui/                # shadcn/ui primitives (Button, Input, Badge, etc.)
 │   │   │   ├── applications/      # ApplicationCard, StatusBadge, KanbanBoard, etc.
 │   │   │   ├── resumes/           # ResumeUploader, ResumeCard, etc.
+│   │   │   ├── profile-forms/      # Shared structured-edit forms used by BOTH profile page & resume modal: FormModal, styles, ExperienceForm, EducationForm, CertificationForm, HeroFieldsForm, SkillsEditor, ExtractedDataEditor, MergeReview (smart-merge review)
 │   │   │   └── layout/            # Sidebar, Header, etc.
 │   │   ├── lib/
 │   │   │   ├── api/               # One file per resource: applications.ts, resumes.ts, auth.ts
@@ -43,16 +44,18 @@ jobtracker/
 │   │   │   └── dashboard.controller.ts    # getStats, getRecentActivity
 │   │   ├── services/
 │   │   │   ├── auth.service.ts    # register, login, refresh, logout, getMe, findOrCreateGoogleUser, loginWithGoogle
-│   │   │   ├── resume.service.ts
+│   │   │   ├── resume.service.ts        # + updateParsedText, updateExtractedData, reExtractProfile (re-run AI) — return {resume, suggestion} via profile diff
+│   │   │   ├── profile.service.ts       # getProfile, updateProfile, syncResume (applies experienceMerges), buildProfileFromResumes, dismissResumeSuggestions, computeResumeProfileDiff, getSyncPlan (AI merge detection)
 │   │   │   ├── application.service.ts  # listApplications, createApplication, getApplication, updateApplication, updateStatus, deleteApplication, getEvents, addTag, removeTag
 │   │   │   ├── contact.service.ts      # createContact, updateContact, deleteContact
 │   │   │   ├── tag.service.ts          # listTags, createTag, deleteTag
-│   │   │   ├── ai.service.ts           # analyzeApplication, generateCoverLetter, generateInterviewQuestions, updateCoverLetter, getCoverLetter
+│   │   │   ├── ai.service.ts           # analyzeApplication, generateCoverLetter, generateInterviewQuestions, updateCoverLetter, getCoverLetter, extractProfileFromResume, detectExperienceMerges (smart merge)
 │   │   │   └── dashboard.service.ts    # getStats (groupBy + responseRate + avgDaysToResponse), getRecentActivity
 │   │   ├── routes/
 │   │   │   ├── index.ts           # Mounts all routers, /health endpoint
 │   │   │   ├── auth.routes.ts
-│   │   │   ├── resume.routes.ts
+│   │   │   ├── resume.routes.ts        # /resumes + /:id/parsed-text, /:id/extracted-data (PATCH structured AI data), /:id/re-extract (POST re-run AI), /:id/set-default
+│   │   │   ├── profile.routes.ts       # /profile (GET, PATCH), /build, /sync-plan/:resumeId (POST — AI merge plan), /sync/:resumeId (POST, DELETE)
 │   │   │   ├── application.routes.ts  # /applications + nested /:id/tags, /:id/contacts, /:id/events, /:id/analyze, /:id/cover-letter, /:id/interview-prep
 │   │   │   ├── contact.routes.ts      # /contacts/:id (PATCH, DELETE)
 │   │   │   ├── tag.routes.ts          # /tags (GET, POST, DELETE /:id)
@@ -65,7 +68,8 @@ jobtracker/
 │   │   │   └── errorHandler.ts    # Global error handler — formats AppError to response
 │   │   ├── validators/
 │   │   │   ├── auth.validator.ts
-│   │   │   ├── resume.validator.ts
+│   │   │   ├── resume.validator.ts        # + updateParsedTextSchema, updateExtractedDataSchema (reuses profile.validator item schemas)
+│   │   │   ├── profile.validator.ts       # updateProfileSchema, syncResumeSchema + exported educationSchema/experienceSchema/certificationSchema (shared with resume.validator)
 │   │   │   ├── application.validator.ts  # createApplicationSchema, updateApplicationSchema, updateStatusSchema
 │   │   │   ├── contact.validator.ts      # createContactSchema, updateContactSchema
 │   │   │   ├── tag.validator.ts          # createTagSchema

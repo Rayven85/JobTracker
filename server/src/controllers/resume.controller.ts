@@ -37,6 +37,16 @@ export async function updateParsedText(req: Request, res: Response) {
   res.json({ success: true, data: result });
 }
 
+export async function updateExtractedData(req: Request, res: Response) {
+  const result = await resumeService.updateExtractedData(req.params['id'] as string, req.user!.userId, req.body);
+  res.json({ success: true, data: result });
+}
+
+export async function reExtractProfile(req: Request, res: Response) {
+  const result = await resumeService.reExtractProfile(req.params['id'] as string, req.user!.userId);
+  res.json({ success: true, data: result });
+}
+
 export async function setDefault(req: Request, res: Response) {
   const resume = await resumeService.setDefault(req.params['id'] as string, req.user!.userId);
   res.json({ success: true, data: resume });

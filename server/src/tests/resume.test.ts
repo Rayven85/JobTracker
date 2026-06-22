@@ -119,3 +119,70 @@ describe('DELETE /api/v1/resumes/:id', () => {
     expect(dbResume).toBeNull();
   });
 });
+
+describe('PATCH /api/v1/resumes/:id/extracted-data', () => {
+  const payload = {
+    name: 'Rayven',
+    skills: ['Rust'],
+    education: [],
+    experience: [{ company: 'Acme', title: 'Engineer', current: false, description: 'Built things' }],
+    certifications: [],
+  };
+
+  it('returns 403 when editing another user\'s resume', async () => {
+    const otherUser = await prisma.user.create({
+      data: { email: 'ed-other@test.jobtracker', password: 'hashed' },
+    });
+    const otherResume = await prisma.resume.create({
+      data: { userId: otherUser.id, s3Key: `resumes/${otherUser.id}/x.pdf`, fileName: 'x.pdf', fileSize: 1, name: 'X' },
+    });
+
+    const res = await request(app)
+      .patch(`/api/v1/resumes/${otherResume.id}/extracted-data`)
+      .set('Authorization', `Bearer ${token}`)
+      .send(payload);
+
+    expect(res.status).toBe(403);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('persists extractedData and returns suggestion: null when user has no profile', async () => {
+    await prisma.userProfile.deleteMany({ where: { userId } });
+    const resume = await prisma.resume.create({
+      data: { userId, s3Key: `resumes/${userId}/ed1.pdf`, fileName: 'ed1.pdf', fileSize: 1, name: 'ED1' },
+    });
+
+    const res = await request(app)
+      .patch(`/api/v1/resumes/${resume.id}/extracted-data`)
+      .set('Authorization', `Bearer ${token}`)
+      .send(payload);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.suggestion).toBeNull();
+    expect(res.body.data.resume.extractedData.skills).toContain('Rust');
+
+    const db = await prisma.resume.findUnique({ where: { id: resume.id } });
+    expect((db!.extractedData as { skills: string[] }).skills).toContain('Rust');
+  });
+
+  it('returns a suggestion when the edit introduces items new to the profile', async () => {
+    await prisma.userProfile.upsert({
+      where: { userId },
+      create: { userId },
+      update: { skills: [], experience: [], education: [], certifications: [] },
+    });
+    const resume = await prisma.resume.create({
+      data: { userId, s3Key: `resumes/${userId}/ed2.pdf`, fileName: 'ed2.pdf', fileSize: 1, name: 'ED2' },
+    });
+
+    const res = await request(app)
+      .patch(`/api/v1/resumes/${resume.id}/extracted-data`)
+      .set('Authorization', `Bearer ${token}`)
+      .send(payload);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.suggestion).not.toBeNull();
+    expect(res.body.data.suggestion.newSkills).toContain('Rust');
+    expect(res.body.data.suggestion.resumeId).toBe(resume.id);
+  });
+});

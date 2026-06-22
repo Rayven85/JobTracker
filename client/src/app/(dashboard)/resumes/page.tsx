@@ -1,22 +1,18 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { Upload, Trash2, Star, FileText, Loader2, CheckCircle2, AlertTriangle, XCircle, Eye, X, Save, ChevronDown, ChevronUp } from 'lucide-react'
+import { Upload, Trash2, Star, FileText, Loader2, CheckCircle2, AlertTriangle, XCircle, Eye, X, Save, ChevronDown, ChevronUp, Sparkles, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
-import { listResumes, getPresignedUrl, uploadToS3, confirmUpload, setDefaultResume, deleteResume, getResume, updateParsedText } from '@/lib/api/resumes'
-import type { Resume, ExtractionStatus } from '@/types'
+import { listResumes, getPresignedUrl, uploadToS3, confirmUpload, setDefaultResume, deleteResume, getResume, updateExtractedData, reExtractResume } from '@/lib/api/resumes'
+import { syncResume, getSyncPlan } from '@/lib/api/profile'
+import type { Resume, ExtractionStatus, ExtractedData, ProfileSuggestion, SyncPlan } from '@/types'
+import { ExtractedDataEditor } from '@/components/profile-forms/ExtractedDataEditor'
+import { MergeReview, type MergeReviewResult } from '@/components/profile-forms/MergeReview'
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / 1048576).toFixed(1)} MB`
-}
-
-function formatDate(date: string | null, isCurrent: boolean) {
-  if (isCurrent) return 'Present'
-  if (!date) return ''
-  const [year, month] = date.split('-')
-  return new Date(Number(year), Number(month) - 1).toLocaleDateString('en-NZ', { month: 'short', year: 'numeric' })
 }
 
 function ExtractionPill({ status }: { status: ExtractionStatus }) {
@@ -28,153 +24,20 @@ function ExtractionPill({ status }: { status: ExtractionStatus }) {
   }
 }
 
-// ─── Structured profile view inside the modal ─────────────────────────────────
+// ─── Read-only raw text view ──────────────────────────────────────────────────
+// parsedText still feeds per-application AI (Analyze / Cover Letter); shown read-only
+// so the user can sanity-check what the AI saw without wrangling messy text.
 
-function ProfileView({ resume, onEditRaw }: { resume: Resume; onEditRaw: () => void }) {
-  const d = resume.extractedData
-  if (!d) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
-        <Loader2 size={20} className="animate-spin text-muted-foreground mb-3" />
-        <p className="text-sm text-muted-foreground">AI is extracting structured data…</p>
-        <p className="text-xs text-muted-foreground mt-1">This may take up to 30 seconds after text extraction completes.</p>
-      </div>
-    )
-  }
-
+function RawTextView({ text, onBack }: { text: string; onBack: () => void }) {
   return (
-    <div className="space-y-5 overflow-y-auto max-h-[420px] pr-1">
-      {/* Identity */}
-      {(d.name || d.email || d.phone || d.location) && (
-        <div>
-          {d.name && <p className="text-base font-bold text-foreground">{d.name}</p>}
-          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
-            {d.email && <p className="text-xs text-muted-foreground">{d.email}</p>}
-            {d.phone && <p className="text-xs text-muted-foreground">{d.phone}</p>}
-            {d.location && <p className="text-xs text-muted-foreground">{d.location}</p>}
-          </div>
-          {d.summary && <p className="text-xs text-muted-foreground mt-2 leading-relaxed">{d.summary}</p>}
-        </div>
-      )}
-
-      {/* Skills */}
-      {d.skills.length > 0 && (
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Skills</p>
-          <div className="flex flex-wrap gap-1.5">
-            {d.skills.map(s => (
-              <span key={s} className="px-2 py-0.5 bg-secondary text-secondary-foreground rounded-full text-xs">{s}</span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Experience */}
-      {d.experience.length > 0 && (
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Experience</p>
-          <div className="space-y-3">
-            {d.experience.map((exp, i) => (
-              <div key={i} className="border-l-2 border-border pl-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">{exp.title}</p>
-                    <p className="text-xs text-muted-foreground">{exp.company}{exp.location ? ` · ${exp.location}` : ''}</p>
-                  </div>
-                  <p className="text-xs text-muted-foreground shrink-0">
-                    {formatDate(exp.startDate, false)}{(exp.startDate || exp.endDate || exp.current) ? ' – ' : ''}{formatDate(exp.endDate, exp.current)}
-                  </p>
-                </div>
-                {exp.description && <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{exp.description}</p>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Education */}
-      {d.education.length > 0 && (
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Education</p>
-          <div className="space-y-2">
-            {d.education.map((edu, i) => (
-              <div key={i} className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">{edu.institution}</p>
-                  <p className="text-xs text-muted-foreground">{edu.degree}{edu.field ? ` · ${edu.field}` : ''}</p>
-                </div>
-                {(edu.startYear || edu.endYear) && (
-                  <p className="text-xs text-muted-foreground shrink-0">{edu.startYear}{edu.endYear ? `–${edu.endYear}` : ''}</p>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Certifications */}
-      {d.certifications.length > 0 && (
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Certifications</p>
-          <div className="space-y-1.5">
-            {d.certifications.map((c, i) => (
-              <div key={i} className="flex items-center justify-between">
-                <p className="text-sm text-foreground">{c.name}{c.issuer ? ` — ${c.issuer}` : ''}</p>
-                {c.year && <p className="text-xs text-muted-foreground shrink-0">{c.year}</p>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <button onClick={onEditRaw} className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors">
-        View / edit raw text
-      </button>
-    </div>
-  )
-}
-
-// ─── Raw text editor ──────────────────────────────────────────────────────────
-
-function RawTextEditor({
-  initialText,
-  onBack,
-  onSave,
-}: {
-  initialText: string
-  onBack: () => void
-  onSave: (text: string) => Promise<void>
-}) {
-  const [text, setText] = useState(initialText)
-  const [isSaving, setIsSaving] = useState(false)
-  const isDirty = text !== initialText
-
-  async function handleSave() {
-    setIsSaving(true)
-    try { await onSave(text) } finally { setIsSaving(false) }
-  }
-
-  return (
-    <div className="flex flex-col gap-3 h-full">
+    <div className="flex flex-col gap-3">
       <button onClick={onBack} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors self-start">
-        <ChevronUp size={13} /> Back to profile view
+        <ChevronUp size={13} /> Back to structured view
       </button>
-      <textarea
-        value={text}
-        onChange={e => setText(e.target.value)}
-        className="flex-1 min-h-[300px] resize-none bg-muted/40 border border-border rounded-[--radius] px-3 py-2.5 text-xs text-foreground font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary/30"
-      />
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">{text.length.toLocaleString()} characters</p>
-        <button
-          onClick={handleSave}
-          disabled={!isDirty || isSaving}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-sm rounded-[--radius] transition-colors disabled:opacity-40"
-        >
-          {isSaving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-          Save
-        </button>
-      </div>
+      <pre className="max-h-[60vh] overflow-y-auto whitespace-pre-wrap bg-muted/40 border border-border rounded-[--radius] px-3 py-2.5 text-xs text-muted-foreground font-mono leading-relaxed">
+        {text || 'No text extracted.'}
+      </pre>
+      <p className="text-xs text-muted-foreground">{text.length.toLocaleString()} characters · read-only</p>
     </div>
   )
 }
@@ -191,6 +54,14 @@ export default function ResumesPage() {
   const [viewingResume, setViewingResume] = useState<Resume | null>(null)
   const [isFetchingResume, setIsFetchingResume] = useState(false)
   const [showRaw, setShowRaw] = useState(false)
+  const [draft, setDraft] = useState<ExtractedData | null>(null)
+  const [isSavingDraft, setIsSavingDraft] = useState(false)
+  const [isReExtracting, setIsReExtracting] = useState(false)
+  const [syncDialog, setSyncDialog] = useState<ProfileSuggestion | null>(null)
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [mergePlan, setMergePlan] = useState<SyncPlan | null>(null)
+
+  const isDirty = !!draft && !!viewingResume && JSON.stringify(draft) !== JSON.stringify(viewingResume.extractedData)
 
   useEffect(() => {
     listResumes()
@@ -266,13 +137,23 @@ export default function ResumesPage() {
     }
   }
 
+  function closeModal() {
+    setViewingResume(null)
+    setDraft(null)
+    setShowRaw(false)
+    setSyncDialog(null)
+    setMergePlan(null)
+  }
+
   async function handleOpenModal(resume: Resume) {
     setShowRaw(false)
+    setDraft(null)
     setViewingResume(resume)
     setIsFetchingResume(true)
     try {
       const full = await getResume(resume.id)
       setViewingResume(full)
+      setDraft(full.extractedData ?? null)
     } catch {
       toast.error('Failed to load resume details')
       setViewingResume(null)
@@ -281,13 +162,87 @@ export default function ResumesPage() {
     }
   }
 
-  async function handleSaveRaw(text: string) {
+  async function handleSaveDraft() {
+    if (!viewingResume || !draft) return
+    setIsSavingDraft(true)
+    try {
+      const { resume, suggestion } = await updateExtractedData(viewingResume.id, draft)
+      const saved = resume.extractedData ?? draft
+      setResumes(prev => prev.map(r => r.id === viewingResume.id ? { ...r, extractionStatus: resume.extractionStatus } : r))
+      setViewingResume(prev => prev ? { ...prev, extractedData: saved } : null)
+      setDraft(saved)
+      if (suggestion) setSyncDialog(suggestion)
+      else toast.success('Resume profile saved')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setIsSavingDraft(false)
+    }
+  }
+
+  async function handleReExtract() {
     if (!viewingResume) return
-    await updateParsedText(viewingResume.id, text)
-    const newStatus = text.trim() ? 'READY' : 'EMPTY'
-    setResumes(prev => prev.map(r => r.id === viewingResume.id ? { ...r, extractionStatus: newStatus as ExtractionStatus } : r))
-    setViewingResume(prev => prev ? { ...prev, parsedText: text } : null)
-    toast.success('Resume text saved')
+    if (isDirty && !confirm('Re-extract will overwrite your unsaved edits with fresh AI output. Continue?')) return
+    setIsReExtracting(true)
+    try {
+      const { resume, suggestion } = await reExtractResume(viewingResume.id)
+      const saved = resume.extractedData ?? null
+      setResumes(prev => prev.map(r => r.id === viewingResume.id ? { ...r, extractionStatus: resume.extractionStatus } : r))
+      setViewingResume(prev => prev ? { ...prev, extractedData: saved } : null)
+      setDraft(saved)
+      if (suggestion) setSyncDialog(suggestion)
+      else toast.success('Re-extracted with AI')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to re-extract')
+    } finally {
+      setIsReExtracting(false)
+    }
+  }
+
+  async function applySync(suggestion: ProfileSuggestion, result: MergeReviewResult) {
+    const experience = suggestion.newExperience.filter((_, i) => !result.mergedIncomingIndexes.includes(i))
+    await syncResume(suggestion.resumeId, {
+      skills: suggestion.newSkills,
+      experience,
+      education: suggestion.newEducation,
+      certifications: suggestion.newCertifications,
+      experienceMerges: result.experienceMerges,
+    })
+    toast.success('Profile updated')
+    setSyncDialog(null)
+    setMergePlan(null)
+  }
+
+  // Sync dialog "Sync to profile" → run AI merge detection; show review if matches exist.
+  async function handleSync() {
+    if (!syncDialog) return
+    setIsSyncing(true)
+    try {
+      const plan = await getSyncPlan(syncDialog.resumeId)
+      if (!plan.suggestion) { setSyncDialog(null); toast.success('Profile already up to date'); return }
+      if (plan.merges.length > 0) {
+        setMergePlan(plan)
+        setSyncDialog(null)
+      } else {
+        await applySync(plan.suggestion, { experienceMerges: [], mergedIncomingIndexes: [] })
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to sync to profile')
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+
+  async function handleMergeConfirm(result: MergeReviewResult) {
+    if (!mergePlan?.suggestion) return
+    setIsSyncing(true)
+    try {
+      await applySync(mergePlan.suggestion, result)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to sync to profile')
+    } finally {
+      setIsSyncing(false)
+    }
   }
 
   return (
@@ -362,25 +317,25 @@ export default function ResumesPage() {
         </ul>
       )}
 
-      {/* Profile / raw text modal */}
+      {/* Structured editor / raw text modal */}
       {viewingResume && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={e => { if (e.target === e.currentTarget) setViewingResume(null) }}>
-          <div className="bg-card border border-border rounded-[--radius-lg] shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={e => { if (e.target === e.currentTarget) closeModal() }}>
+          <div className="bg-card border border-border rounded-[--radius-lg] shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col">
             {/* Modal header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
               <div>
                 <h2 className="text-sm font-semibold text-foreground">{viewingResume.name}</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {showRaw ? 'Raw extracted text — edit if AI missed content' : 'AI-extracted profile from this resume'}
+                  {showRaw ? 'Original extracted text (read-only)' : 'Edit the AI-extracted profile from this resume'}
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                {!showRaw && !isFetchingResume && viewingResume.extractedData && (
+                {!showRaw && !isFetchingResume && (
                   <button onClick={() => setShowRaw(true)} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
-                    <ChevronDown size={13} /> Raw text
+                    <ChevronDown size={13} /> Original text
                   </button>
                 )}
-                <button onClick={() => setViewingResume(null)} className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-[--radius] transition-colors">
+                <button onClick={closeModal} className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-[--radius] transition-colors">
                   <X size={16} />
                 </button>
               </div>
@@ -393,17 +348,85 @@ export default function ResumesPage() {
                   <Loader2 size={20} className="animate-spin text-muted-foreground" />
                 </div>
               ) : showRaw ? (
-                <RawTextEditor
-                  initialText={viewingResume.parsedText ?? ''}
-                  onBack={() => setShowRaw(false)}
-                  onSave={handleSaveRaw}
-                />
+                <RawTextView text={viewingResume.parsedText ?? ''} onBack={() => setShowRaw(false)} />
+              ) : draft ? (
+                <ExtractedDataEditor data={draft} onChange={setDraft} />
               ) : (
-                <ProfileView resume={viewingResume} onEditRaw={() => setShowRaw(true)} />
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <Loader2 size={20} className="animate-spin text-muted-foreground mb-3" />
+                  <p className="text-sm text-muted-foreground">AI is extracting structured data…</p>
+                  <p className="text-xs text-muted-foreground mt-1">This may take up to 30 seconds after text extraction completes.</p>
+                </div>
               )}
+            </div>
+
+            {/* Modal footer — re-extract + save structured edits */}
+            {!showRaw && !isFetchingResume && draft && (
+              <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-t border-border shrink-0">
+                <button
+                  onClick={handleReExtract}
+                  disabled={isReExtracting || isSavingDraft}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-[--radius] transition-colors disabled:opacity-50"
+                  title="Re-run AI extraction from the original text (overwrites current data)"
+                >
+                  {isReExtracting ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                  Re-extract with AI
+                </button>
+                <div className="flex items-center gap-3">
+                  <button onClick={closeModal} className="px-4 py-2 bg-muted hover:bg-accent border border-border text-foreground rounded-[--radius] text-sm font-medium transition-colors">Close</button>
+                  <button
+                    onClick={handleSaveDraft}
+                    disabled={!isDirty || isSavingDraft}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-[--radius] transition-colors disabled:opacity-40"
+                  >
+                    {isSavingDraft ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                    Save changes
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Sync-to-profile confirmation */}
+      {syncDialog && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50" onClick={e => { if (e.target === e.currentTarget && !isSyncing) setSyncDialog(null) }}>
+          <div className="bg-card border border-border rounded-[--radius-lg] shadow-xl w-full max-w-md flex flex-col">
+            <div className="flex items-center gap-2 px-5 py-4 border-b border-border">
+              <Sparkles size={16} className="text-primary" />
+              <h2 className="text-sm font-semibold text-foreground">Sync changes to your profile?</h2>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <p className="text-xs text-muted-foreground">This resume now contains information not yet in your profile:</p>
+              <ul className="text-xs text-foreground space-y-1">
+                {syncDialog.newSkills.length > 0 && <li>• {syncDialog.newSkills.length} new skill{syncDialog.newSkills.length !== 1 ? 's' : ''}</li>}
+                {syncDialog.newExperience.length > 0 && <li>• {syncDialog.newExperience.length} new experience entr{syncDialog.newExperience.length !== 1 ? 'ies' : 'y'}</li>}
+                {syncDialog.newEducation.length > 0 && <li>• {syncDialog.newEducation.length} new education entr{syncDialog.newEducation.length !== 1 ? 'ies' : 'y'}</li>}
+                {syncDialog.newCertifications.length > 0 && <li>• {syncDialog.newCertifications.length} new certification{syncDialog.newCertifications.length !== 1 ? 's' : ''}</li>}
+              </ul>
+            </div>
+            <div className="flex items-center justify-end gap-3 px-5 py-3.5 border-t border-border">
+              <button onClick={() => setSyncDialog(null)} disabled={isSyncing} className="px-4 py-2 bg-muted hover:bg-accent border border-border text-foreground rounded-[--radius] text-sm font-medium transition-colors disabled:opacity-50">Not now</button>
+              <button onClick={handleSync} disabled={isSyncing} className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-[--radius] transition-colors disabled:opacity-50">
+                {isSyncing ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                Sync to profile
+              </button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Phase 2: smart-merge review */}
+      {mergePlan?.suggestion && (
+        <MergeReview
+          matches={mergePlan.merges}
+          existing={mergePlan.existingExperience}
+          incoming={mergePlan.suggestion.newExperience}
+          busy={isSyncing}
+          onConfirm={handleMergeConfirm}
+          onCancel={() => setMergePlan(null)}
+        />
       )}
     </div>
   )

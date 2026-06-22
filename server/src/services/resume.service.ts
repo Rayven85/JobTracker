@@ -5,7 +5,8 @@ import { prisma } from '../lib/prisma';
 import { AppError } from '../lib/AppError';
 import { generatePresignedUploadUrl, deleteS3Object, getS3ObjectBuffer } from '../lib/s3';
 import { extractProfileFromResume } from './ai.service';
-import type { ConfirmUploadInput } from '../validators/resume.validator';
+import { computeResumeProfileDiff } from './profile.service';
+import type { ConfirmUploadInput, UpdateExtractedDataInput } from '../validators/resume.validator';
 
 export async function getPresignedUrl(userId: string, fileName: string, contentType: string) {
   if (contentType !== 'application/pdf') {
@@ -125,6 +126,43 @@ export async function updateParsedText(resumeId: string, userId: string, parsedT
     data: { parsedText, extractionStatus: status },
     select: { id: true, parsedText: true, extractionStatus: true },
   });
+}
+
+export async function updateExtractedData(resumeId: string, userId: string, data: UpdateExtractedDataInput) {
+  const resume = await prisma.resume.findUnique({ where: { id: resumeId } });
+  if (!resume) throw new AppError(404, 'RESUME_NOT_FOUND', 'Resume not found');
+  if (resume.userId !== userId) throw new AppError(403, 'FORBIDDEN', 'Access denied');
+
+  const updated = await prisma.resume.update({
+    where: { id: resumeId },
+    data: { extractedData: data as object },
+    select: { id: true, name: true, extractedData: true, extractionStatus: true },
+  });
+
+  const suggestion = await computeResumeProfileDiff(userId, resumeId);
+  return { resume: updated, suggestion };
+}
+
+// Re-run AI extraction on an existing resume's parsedText, overwriting extractedData.
+// Lets users apply prompt improvements without re-uploading. Returns {resume, suggestion}
+// like updateExtractedData so the client can offer a profile sync.
+export async function reExtractProfile(resumeId: string, userId: string) {
+  const resume = await prisma.resume.findUnique({ where: { id: resumeId } });
+  if (!resume) throw new AppError(404, 'RESUME_NOT_FOUND', 'Resume not found');
+  if (resume.userId !== userId) throw new AppError(403, 'FORBIDDEN', 'Access denied');
+  if (!resume.parsedText || resume.parsedText.trim().length === 0) {
+    throw new AppError(400, 'NO_PARSED_TEXT', 'This resume has no extracted text to analyze');
+  }
+
+  const extracted = await extractProfileFromResume(resume.parsedText);
+  const updated = await prisma.resume.update({
+    where: { id: resumeId },
+    data: { extractedData: extracted as object },
+    select: { id: true, name: true, extractedData: true, extractionStatus: true },
+  });
+
+  const suggestion = await computeResumeProfileDiff(userId, resumeId);
+  return { resume: updated, suggestion };
 }
 
 async function extractAndSaveProfile(resumeId: string, parsedText: string): Promise<void> {

@@ -16,6 +16,11 @@ export async function syncResume(req: Request, res: Response) {
   res.json({ success: true, data: profile });
 }
 
+export async function getSyncPlan(req: Request, res: Response) {
+  const plan = await profileService.getSyncPlan(req.user!.userId, req.params['resumeId'] as string);
+  res.json({ success: true, data: plan });
+}
+
 export async function buildProfile(req: Request, res: Response) {
   const profile = await profileService.buildProfileFromResumes(req.user!.userId);
   res.json({ success: true, data: profile });

@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { AppError } from '../lib/AppError';
-import { extractProfileFromResume, type ExtractedProfile } from './ai.service';
+import { extractProfileFromResume, detectExperienceMerges, type ExtractedProfile } from './ai.service';
 import type { UpdateProfileInput, SyncResumeInput } from '../validators/profile.validator';
 
 function toLower(s: string) { return s.toLowerCase().trim(); }
@@ -81,6 +81,38 @@ export async function getProfile(userId: string) {
   return { ...profile, suggestions };
 }
 
+// Diff a resume's extractedData against the user's profile (reuses computeSuggestions).
+// Returns a ProfileSuggestion-shaped diff or null when nothing new. Used after a resume
+// extractedData edit to decide whether to offer syncing into the profile.
+export async function computeResumeProfileDiff(userId: string, resumeId: string) {
+  const profile = await prisma.userProfile.findUnique({ where: { userId } });
+  if (!profile) return null;
+
+  const resume = await prisma.resume.findUnique({
+    where: { id: resumeId },
+    select: { id: true, userId: true, name: true, extractedData: true },
+  });
+  if (!resume || resume.userId !== userId || resume.extractedData === null) return null;
+
+  const diff = computeSuggestions(profile, resume.extractedData as unknown as ExtractedProfile);
+  if (!diff) return null;
+  return { resumeId: resume.id, resumeName: resume.name, ...diff };
+}
+
+// Phase 2: returns the new-item diff for a resume AND AI-detected merges between the
+// resume's new experiences and the profile's existing experiences (same role/project,
+// different title). Runs the AI merge step only when there is something to compare.
+export async function getSyncPlan(userId: string, resumeId: string) {
+  const suggestion = await computeResumeProfileDiff(userId, resumeId);
+  if (!suggestion) return { suggestion: null, merges: [], existingExperience: [] };
+
+  const profile = await prisma.userProfile.findUnique({ where: { userId } });
+  const existingExperience = asArray(profile?.experience ?? []) as ExtractedProfile['experience'];
+
+  const merges = await detectExperienceMerges(existingExperience, suggestion.newExperience);
+  return { suggestion, merges, existingExperience };
+}
+
 export async function updateProfile(userId: string, input: UpdateProfileInput) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return prisma.userProfile.upsert({
@@ -101,9 +133,18 @@ export async function syncResume(userId: string, resumeId: string, accepted: Syn
   if (!resume) throw new AppError(404, 'RESUME_NOT_FOUND', 'Resume not found');
   if (resume.userId !== userId) throw new AppError(403, 'FORBIDDEN', 'Access denied');
 
+  // Apply smart merges first: overwrite existing entries in place (by index), then append new ones.
+  const experience = [...asArray(profile.experience)];
+  for (const m of accepted.experienceMerges) {
+    if (m.existingIndex >= 0 && m.existingIndex < experience.length) {
+      experience[m.existingIndex] = m.merged;
+    }
+  }
+  experience.push(...accepted.experience);
+
   const merged = {
     skills: [...new Set([...asArray(profile.skills) as string[], ...accepted.skills])],
-    experience: [...asArray(profile.experience), ...accepted.experience],
+    experience,
     education: [...asArray(profile.education), ...accepted.education],
     certifications: [...asArray(profile.certifications), ...accepted.certifications],
     syncedResumeIds: [...new Set([...asArray(profile.syncedResumeIds) as string[], resumeId])],
@@ -114,7 +155,10 @@ export async function syncResume(userId: string, resumeId: string, accepted: Syn
   return prisma.userProfile.update({ where: { userId }, data: merged as any });
 }
 
-// Runs AI extraction on all resumes that have parsedText but no extractedData yet
+// "Build / rebuild from resumes": extract any not-yet-processed resumes, then re-offer
+// EVERY resume's data as suggestions by clearing syncedResumeIds. This way, anything the
+// user has since deleted from the profile re-appears as a suggestion (items already present
+// are deduped away by computeSuggestions, so they won't show again).
 export async function buildProfileFromResumes(userId: string) {
   // Fetch all READY resumes, then filter in JS — avoids Prisma.AnyNull behaviour with the pg adapter
   const allReady = await prisma.resume.findMany({
@@ -137,6 +181,13 @@ export async function buildProfileFromResumes(userId: string) {
       console.error(`[profile] build failed for resume ${resume.id}:`, err);
     }
   }
+
+  // Reset sync tracking so all resumes are re-evaluated against the current profile.
+  await prisma.userProfile.upsert({
+    where: { userId },
+    create: { userId, syncedResumeIds: [] },
+    update: { syncedResumeIds: [] },
+  });
 
   return getProfile(userId);
 }
