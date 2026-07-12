@@ -16,11 +16,48 @@ if (!process.env.GROQ_API_KEY) throw new Error('GROQ_API_KEY is required');
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const MODEL = 'llama-3.3-70b-versatile';
 
-// Groq counts the reserved max_tokens toward the per-minute token limit (TPM, 12000 on
-// the free tier), so input + maxTokens must stay under it. Callers pass a budget sized to
-// what the call actually needs — large enough to avoid truncation, small enough to fit TPM.
+// Free-tier limit is 12000 tokens/minute, counting input + reserved max_tokens. Two guards:
+// 1) callers pass a max_tokens budget sized to the call (small enough that input + budget fits);
+// 2) createWithRetry rides out transient 429s (bursts of calls in one minute) with backoff,
+//    honouring the server's retry-after, and converts a genuine exhaustion into a clear error.
+interface CompletionBody {
+  model: string;
+  messages: { role: 'user'; content: string }[];
+  temperature: number;
+  max_tokens: number;
+  response_format?: { type: 'json_object' };
+}
+
+async function createWithRetry(body: CompletionBody): Promise<Groq.Chat.ChatCompletion> {
+  const MAX_ATTEMPTS = 4;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await groq.chat.completions.create(body);
+    } catch (err) {
+      const status = (err as { status?: number }).status;
+      if (status === 429 && attempt < MAX_ATTEMPTS) {
+        const header = (err as { headers?: Record<string, string> }).headers?.['retry-after'];
+        const retryAfter = Number(header);
+        const waitMs = Number.isFinite(retryAfter) && retryAfter > 0
+          ? Math.min(retryAfter * 1000, 30000)
+          : Math.min(3000 * 2 ** (attempt - 1), 20000);
+        await new Promise(resolve => setTimeout(resolve, waitMs));
+        continue;
+      }
+      if (status === 429 || status === 413) {
+        throw new AppError(
+          503,
+          'AI_RATE_LIMITED',
+          'The AI service hit its rate limit (free tier). Please wait a minute and try again.'
+        );
+      }
+      throw err;
+    }
+  }
+}
+
 export async function generateJSON<T>(prompt: string, maxTokens = 4000): Promise<T> {
-  const response = await groq.chat.completions.create({
+  const response = await createWithRetry({
     model: MODEL,
     messages: [{ role: 'user', content: prompt }],
     response_format: { type: 'json_object' },
@@ -36,7 +73,7 @@ export async function generateJSON<T>(prompt: string, maxTokens = 4000): Promise
 }
 
 export async function generateText(prompt: string, maxTokens = 1500): Promise<string> {
-  const response = await groq.chat.completions.create({
+  const response = await createWithRetry({
     model: MODEL,
     messages: [{ role: 'user', content: prompt }],
     temperature: 0.7,

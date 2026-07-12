@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { Upload, Trash2, Star, FileText, Loader2, CheckCircle2, AlertTriangle, XCircle, Eye, X, Save, ChevronDown, ChevronUp, Sparkles, RefreshCw } from 'lucide-react'
+import { Upload, Trash2, FileText, Loader2, CheckCircle2, AlertTriangle, XCircle, Eye, X, Save, ChevronDown, ChevronUp, Sparkles, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { listResumes, getPresignedUrl, uploadToS3, confirmUpload, setDefaultResume, deleteResume, getResume, updateExtractedData, reExtractResume } from '@/lib/api/resumes'
 import { syncResume, getSyncPlan } from '@/lib/api/profile'
@@ -304,8 +304,12 @@ export default function ResumesPage() {
                   </button>
                 )}
                 {!resume.isDefault && (
-                  <button onClick={() => handleSetDefault(resume.id)} title="Set as default" className="p-2 text-muted-foreground hover:text-amber-500 hover:bg-muted rounded-[--radius] transition-colors">
-                    <Star size={15} />
+                  <button
+                    onClick={() => handleSetDefault(resume.id)}
+                    title="Use this resume by default when creating new applications"
+                    className="px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground border border-border hover:bg-muted rounded-[--radius] transition-colors whitespace-nowrap"
+                  >
+                    Set default
                   </button>
                 )}
                 <button onClick={() => handleDelete(resume.id)} title="Delete" className="p-2 text-muted-foreground hover:text-destructive hover:bg-muted rounded-[--radius] transition-colors">
@@ -341,8 +345,8 @@ export default function ResumesPage() {
               </div>
             </div>
 
-            {/* Modal body */}
-            <div className="flex-1 overflow-hidden px-5 py-4">
+            {/* Modal body — this is the scroll container (flex-1 + min-h-0 + overflow-y-auto) */}
+            <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
               {isFetchingResume ? (
                 <div className="h-full flex items-center justify-center">
                   <Loader2 size={20} className="animate-spin text-muted-foreground" />
@@ -353,9 +357,23 @@ export default function ResumesPage() {
                 <ExtractedDataEditor data={draft} onChange={setDraft} />
               ) : (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <Loader2 size={20} className="animate-spin text-muted-foreground mb-3" />
-                  <p className="text-sm text-muted-foreground">AI is extracting structured data…</p>
-                  <p className="text-xs text-muted-foreground mt-1">This may take up to 30 seconds after text extraction completes.</p>
+                  {isReExtracting ? (
+                    <>
+                      <Loader2 size={20} className="animate-spin text-muted-foreground mb-3" />
+                      <p className="text-sm text-muted-foreground">Running AI extraction…</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-muted-foreground">No structured data yet.</p>
+                      <p className="text-xs text-muted-foreground mt-1 mb-4">Extraction may still be running, or it may have failed. Run it manually to see the result (or any error).</p>
+                      <button
+                        onClick={handleReExtract}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-[--radius] transition-colors"
+                      >
+                        <RefreshCw size={14} /> Run AI extraction
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>

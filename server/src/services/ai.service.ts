@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { generateJSON, generateText } from '../lib/ai';
 import { prisma } from '../lib/prisma';
 import { AppError } from '../lib/AppError';
@@ -16,6 +17,42 @@ export interface ExtractedProfile {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+// Flattens an ExtractedProfile into plain resume text — used both as the AI input when an
+// application has no uploaded resume (only a generated tailored one) and for downloads.
+export function serializeProfileToText(data: ExtractedProfile): string {
+  const lines: string[] = [];
+  if (data.name) lines.push(data.name);
+  const contact = [data.email, data.phone, data.location].filter(Boolean).join(' | ');
+  if (contact) lines.push(contact);
+  if (data.summary) lines.push(`\nSUMMARY\n${data.summary}`);
+  if (data.skills?.length) lines.push(`\nSKILLS\n${data.skills.join(', ')}`);
+  if (data.experience?.length) {
+    lines.push('\nEXPERIENCE');
+    for (const e of data.experience) {
+      const period = [e.startDate, e.current ? 'Present' : e.endDate].filter(Boolean).join(' – ');
+      const header = [e.title, e.company].filter(Boolean).join(' — ');
+      lines.push(`\n${header}${e.location ? `, ${e.location}` : ''}${period ? ` (${period})` : ''}`);
+      if (e.description) lines.push(e.description);
+    }
+  }
+  if (data.education?.length) {
+    lines.push('\nEDUCATION');
+    for (const ed of data.education) {
+      const yr = [ed.startYear, ed.endYear].filter(Boolean).join('–');
+      lines.push(`${ed.institution} — ${ed.degree}${ed.field ? `, ${ed.field}` : ''}${yr ? ` (${yr})` : ''}`);
+    }
+  }
+  if (data.certifications?.length) {
+    lines.push('\nCERTIFICATIONS & AWARDS');
+    for (const c of data.certifications) {
+      lines.push(`${c.name}${c.issuer ? ` — ${c.issuer}` : ''}${c.year ? ` (${c.year})` : ''}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+// Resolves the resume text an application feeds to AI features: the uploaded resume's
+// parsedText if attached, otherwise the active tailored resume serialized to text.
 async function getApplicationWithResume(applicationId: string, userId: string) {
   const application = await prisma.application.findUnique({
     where: { id: applicationId },
@@ -27,15 +64,23 @@ async function getApplicationWithResume(applicationId: string, userId: string) {
       jobDescription: true,
       resumeId: true,
       resume: { select: { parsedText: true } },
+      tailoredResumes: { where: { isActive: true }, select: { data: true }, take: 1 },
       user: { select: { name: true } },
     },
   });
   if (!application) throw new AppError(404, 'APPLICATION_NOT_FOUND', 'Application not found');
   if (application.userId !== userId) throw new AppError(403, 'FORBIDDEN', 'Access denied');
-  if (!application.resumeId || !application.resume?.parsedText) {
-    throw new AppError(400, 'RESUME_REQUIRED', 'A resume with parsed text is required for AI features');
+
+  let resumeText: string | null = null;
+  if (application.resumeId && application.resume?.parsedText) {
+    resumeText = application.resume.parsedText;
+  } else if (application.tailoredResumes[0]) {
+    resumeText = serializeProfileToText(application.tailoredResumes[0].data as unknown as ExtractedProfile);
   }
-  return application as typeof application & { resume: { parsedText: string } };
+  if (!resumeText) {
+    throw new AppError(400, 'RESUME_REQUIRED', 'Attach a resume or generate one from your profile first');
+  }
+  return { ...application, resumeText };
 }
 
 // ─── Pure AI calls (swap provider by editing ai.ts only — do not touch these) ──
@@ -109,7 +154,12 @@ Return JSON with exactly this shape:
   );
 }
 
+// ~6k tokens of resume text. With a 4k output budget that keeps a single request under the
+// 12k/min free-tier limit, so extraction never 413s on its own. Résumés rarely exceed this.
+const MAX_RESUME_CHARS = 24000;
+
 async function callExtractProfile(parsedText: string) {
+  const text = parsedText.length > MAX_RESUME_CHARS ? parsedText.slice(0, MAX_RESUME_CHARS) : parsedText;
   return generateJSON<ExtractedProfile>(
     `You are extracting a structured profile from a resume to build a master career record.
 This profile will later be used to generate tailored resumes for specific job descriptions,
@@ -157,8 +207,8 @@ Return JSON with exactly this shape:
 }
 
 Resume text:
-${parsedText}`,
-    6000
+${text}`,
+    4000
   );
 }
 
@@ -168,7 +218,7 @@ export async function analyzeApplication(applicationId: string, userId: string) 
   const application = await getApplicationWithResume(applicationId, userId);
 
   const analysis = await callAnalyze(
-    application.resume.parsedText,
+    application.resumeText,
     application.jobDescription
   );
 
@@ -194,7 +244,7 @@ export async function generateCoverLetter(
   const applicantName = application.user.name ?? 'Candidate';
 
   const content = await callCoverLetter(
-    application.resume.parsedText,
+    application.resumeText,
     application.jobDescription,
     applicantName,
     application.companyName,
@@ -230,7 +280,7 @@ export async function generateInterviewQuestions(applicationId: string, userId: 
   const application = await getApplicationWithResume(applicationId, userId);
 
   const { questions } = await callInterviewQuestions(
-    application.resume.parsedText,
+    application.resumeText,
     application.jobDescription,
     application.companyName
   );
@@ -345,4 +395,133 @@ Only include matches with confidence >= 0.6. If there are none, return { "matche
       Number.isInteger(m.incomingIndex) && m.incomingIndex >= 0 && m.incomingIndex < incoming.length &&
       m.merged != null
   );
+}
+
+// ─── Phase 2: tailored resume (generate a JD-matched resume from the master profile) ──
+
+// Budgets keep profile + JD + reserved output under the 12k/min free-tier limit.
+const MAX_PROFILE_CHARS = 16000;
+const MAX_JD_CHARS = 8000;
+
+async function callTailoredResume(
+  profileText: string,
+  jobDescription: string,
+  companyName: string,
+  jobTitle: string
+) {
+  const profile = profileText.length > MAX_PROFILE_CHARS ? profileText.slice(0, MAX_PROFILE_CHARS) : profileText;
+  const jd = jobDescription.length > MAX_JD_CHARS ? jobDescription.slice(0, MAX_JD_CHARS) : jobDescription;
+  return generateJSON<ExtractedProfile>(
+    `You are tailoring a candidate's master career profile into a resume targeted at a specific job.
+Select, reorder, and rephrase the candidate's EXISTING background to best match the job description.
+
+CRITICAL HONESTY RULES — never violate:
+- Use ONLY facts present in the candidate profile below. NEVER invent employers, job titles, dates, degrees, certifications, metrics, or skills.
+- Do NOT add a skill or technology the candidate does not already list, even if the job requires it.
+- Every bullet must trace back to something in the profile. You may rephrase for relevance and impact — not fabricate.
+
+TAILORING GUIDANCE:
+- Put the most job-relevant experience and skills first; drop clearly irrelevant items.
+- For each role keep the strongest 3–6 bullets that overlap with the job's requirements/keywords; preserve real metrics, tools, and technologies.
+- Rewrite the summary to position the candidate for THIS role using only real background (or null if the profile has none).
+- Keep relevant education and certifications; you may omit clearly irrelevant ones.
+- Keep the "\\n• " bullet format inside each experience "description".
+
+Return JSON with exactly this shape:
+{
+  "name": "full name or null",
+  "email": "email or null",
+  "phone": "phone or null",
+  "location": "location or null",
+  "summary": "tailored summary using only real background, or null",
+  "skills": ["only skills the candidate actually has, ordered by relevance to the job"],
+  "education": [{ "institution": "...", "degree": "...", "field": "... or null", "startYear": 2018, "endYear": 2022 }],
+  "experience": [{ "company": "...", "title": "...", "location": "... or null", "startDate": "2020-01 or null", "endDate": "2023-06 or null", "current": false, "description": "• bullet\\n• bullet" }],
+  "certifications": [{ "name": "...", "issuer": "... or null", "year": 2021 }]
+}
+
+TARGET JOB: ${jobTitle} at ${companyName}
+Job description:
+${jd}
+
+Candidate master profile (the ONLY source of truth):
+${profile}`,
+    4000
+  );
+}
+
+// Reads the user's master profile and flattens it to text for tailoring.
+// Returns null when there's nothing substantive to tailor from.
+async function buildUserProfileText(userId: string): Promise<string | null> {
+  const profile = await prisma.userProfile.findUnique({ where: { userId } });
+  if (!profile) return null;
+  const data: ExtractedProfile = {
+    name: profile.name,
+    email: profile.email,
+    phone: profile.phone,
+    location: profile.location,
+    summary: profile.summary,
+    skills: (profile.skills as unknown as string[]) ?? [],
+    education: (profile.education as unknown as ExtractedProfile['education']) ?? [],
+    experience: (profile.experience as unknown as ExtractedProfile['experience']) ?? [],
+    certifications: (profile.certifications as unknown as ExtractedProfile['certifications']) ?? [],
+  };
+  const hasContent = data.experience.length > 0 || data.skills.length > 0 || data.education.length > 0 || !!data.summary;
+  if (!hasContent) return null;
+  return serializeProfileToText(data);
+}
+
+export async function generateTailoredResume(applicationId: string, userId: string) {
+  const application = await prisma.application.findUnique({
+    where: { id: applicationId },
+    select: { id: true, userId: true, companyName: true, jobTitle: true, jobDescription: true },
+  });
+  if (!application) throw new AppError(404, 'APPLICATION_NOT_FOUND', 'Application not found');
+  if (application.userId !== userId) throw new AppError(403, 'FORBIDDEN', 'Access denied');
+
+  const profileText = await buildUserProfileText(userId);
+  if (!profileText) {
+    throw new AppError(400, 'PROFILE_EMPTY', 'Build your profile first — there is no profile data to tailor from');
+  }
+
+  const data = await callTailoredResume(
+    profileText,
+    application.jobDescription,
+    application.companyName,
+    application.jobTitle
+  );
+
+  const existingCount = await prisma.tailoredResume.count({ where: { applicationId } });
+  return prisma.$transaction(async (tx) => {
+    await tx.tailoredResume.updateMany({ where: { applicationId, isActive: true }, data: { isActive: false } });
+    const created = await tx.tailoredResume.create({
+      data: {
+        applicationId,
+        data: data as unknown as Prisma.InputJsonValue,
+        version: existingCount + 1,
+        isActive: true,
+      },
+    });
+    await tx.applicationEvent.create({ data: { applicationId, eventType: 'TAILORED_RESUME_GENERATED' } });
+    return created;
+  });
+}
+
+export async function updateTailoredResume(
+  tailoredResumeId: string,
+  userId: string,
+  data: ExtractedProfile
+) {
+  const tailored = await prisma.tailoredResume.findUnique({
+    where: { id: tailoredResumeId },
+    include: { application: { select: { userId: true } } },
+  });
+  if (!tailored) throw new AppError(404, 'TAILORED_RESUME_NOT_FOUND', 'Tailored resume not found');
+  if (tailored.application.userId !== userId) throw new AppError(403, 'FORBIDDEN', 'Access denied');
+
+  return prisma.tailoredResume.update({
+    where: { id: tailoredResumeId },
+    data: { data: data as unknown as Prisma.InputJsonValue },
+    select: { id: true, data: true, version: true, updatedAt: true },
+  });
 }

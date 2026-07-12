@@ -56,7 +56,7 @@ export function ExtractedDataEditor({ data, onChange }: { data: ExtractedData; o
   function deleteCert(i: number) { if (confirm('Delete this certification?')) onChange({ ...data, certifications: data.certifications.filter((_, j) => j !== i) }) }
 
   return (
-    <div className="space-y-5 overflow-y-auto max-h-[440px] pr-1">
+    <div className="space-y-5 pr-1">
       {/* Identity */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
