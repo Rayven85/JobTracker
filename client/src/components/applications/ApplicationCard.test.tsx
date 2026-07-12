@@ -22,6 +22,8 @@ const baseApp: Application = {
   jobDescription: null,
   jobUrl: null,
   resumeId: null,
+  resume: null,
+  tailoredResumes: [],
   salaryMin: null,
   salaryMax: null,
   notes: null,

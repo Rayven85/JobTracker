@@ -37,10 +37,11 @@ jobtracker/
 │   │   ├── controllers/
 │   │   │   ├── auth.controller.ts
 │   │   │   ├── resume.controller.ts
-│   │   │   ├── application.controller.ts  # + analyzeApplication, generateCoverLetter, generateInterviewQuestions
+│   │   │   ├── application.controller.ts  # + analyzeApplication, generateCoverLetter, generateInterviewQuestions, generateTailoredResume
 │   │   │   ├── contact.controller.ts
 │   │   │   ├── tag.controller.ts
 │   │   │   ├── cover-letter.controller.ts # updateCoverLetter, downloadCoverLetter
+│   │   │   ├── tailored-resume.controller.ts # updateTailoredResume (PDF export is client-side, no download endpoint)
 │   │   │   └── dashboard.controller.ts    # getStats, getRecentActivity
 │   │   ├── services/
 │   │   │   ├── auth.service.ts    # register, login, refresh, logout, getMe, findOrCreateGoogleUser, loginWithGoogle
@@ -49,17 +50,18 @@ jobtracker/
 │   │   │   ├── application.service.ts  # listApplications, createApplication, getApplication, updateApplication, updateStatus, deleteApplication, getEvents, addTag, removeTag
 │   │   │   ├── contact.service.ts      # createContact, updateContact, deleteContact
 │   │   │   ├── tag.service.ts          # listTags, createTag, deleteTag
-│   │   │   ├── ai.service.ts           # analyzeApplication, generateCoverLetter, generateInterviewQuestions, updateCoverLetter, getCoverLetter, extractProfileFromResume, detectExperienceMerges (smart merge)
+│   │   │   ├── ai.service.ts           # analyzeApplication, generateCoverLetter, generateInterviewQuestions, updateCoverLetter, getCoverLetter, extractProfileFromResume, detectExperienceMerges (smart merge), generateTailoredResume/updateTailoredResume (JD-matched resume from profile), serializeProfileToText. AI resume-text source: attached Resume.parsedText → else active TailoredResume. Tailored-resume PDF export is client-side (client/src/lib/resume-pdf.tsx, @react-pdf/renderer); "Save to Resumes" reuses the presigned S3 upload flow
 │   │   │   └── dashboard.service.ts    # getStats (groupBy + responseRate + avgDaysToResponse), getRecentActivity
 │   │   ├── routes/
 │   │   │   ├── index.ts           # Mounts all routers, /health endpoint
 │   │   │   ├── auth.routes.ts
 │   │   │   ├── resume.routes.ts        # /resumes + /:id/parsed-text, /:id/extracted-data (PATCH structured AI data), /:id/re-extract (POST re-run AI), /:id/set-default
 │   │   │   ├── profile.routes.ts       # /profile (GET, PATCH), /build, /sync-plan/:resumeId (POST — AI merge plan), /sync/:resumeId (POST, DELETE)
-│   │   │   ├── application.routes.ts  # /applications + nested /:id/tags, /:id/contacts, /:id/events, /:id/analyze, /:id/cover-letter, /:id/interview-prep
+│   │   │   ├── application.routes.ts  # /applications + nested /:id/tags, /:id/contacts, /:id/events, /:id/analyze, /:id/cover-letter, /:id/interview-prep, /:id/tailored-resume
 │   │   │   ├── contact.routes.ts      # /contacts/:id (PATCH, DELETE)
 │   │   │   ├── tag.routes.ts          # /tags (GET, POST, DELETE /:id)
 │   │   │   ├── cover-letter.routes.ts # /cover-letters/:id (PATCH), /:id/download (GET)
+│   │   │   ├── tailored-resume.routes.ts # /tailored-resumes/:id (PATCH structured edits)
 │   │   │   └── dashboard.routes.ts    # /dashboard/stats, /dashboard/recent
 │   │   ├── middleware/
 │   │   │   ├── auth.ts            # JWT verification → attaches req.user
@@ -73,7 +75,8 @@ jobtracker/
 │   │   │   ├── application.validator.ts  # createApplicationSchema, updateApplicationSchema, updateStatusSchema
 │   │   │   ├── contact.validator.ts      # createContactSchema, updateContactSchema
 │   │   │   ├── tag.validator.ts          # createTagSchema
-│   │   │   └── cover-letter.validator.ts # coverLetterRequestSchema, updateCoverLetterSchema
+│   │   │   ├── cover-letter.validator.ts # coverLetterRequestSchema, updateCoverLetterSchema
+│   │   │   └── tailored-resume.validator.ts # updateTailoredResumeSchema (reuses profile item schemas)
 │   │   ├── lib/
 │   │   │   ├── prisma.ts          # PrismaClient singleton (uses PrismaPg adapter)
 │   │   │   ├── tokens.ts          # signAccessToken, signRefreshToken, hashToken, verifyAccessToken

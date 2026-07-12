@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
+import { useEffect, useState, useRef, use } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, ExternalLink, Loader2, ChevronDown, ChevronRight,
@@ -12,13 +12,22 @@ import {
   getApplication, updateApplication, updateStatus, deleteApplication,
   analyzeApplication, generateCoverLetter, updateCoverLetter,
   generateInterviewPrep, addContact,
+  generateTailoredResume, updateTailoredResume,
 } from '@/lib/api/applications'
+import { listResumes, getPresignedUrl, uploadToS3, confirmUpload } from '@/lib/api/resumes'
+import { ExtractedDataEditor } from '@/components/profile-forms/ExtractedDataEditor'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { ALL_STATUSES, STATUS_LABELS, PIPELINE_STATUSES, getStatusColors } from '@/lib/status'
-import type { Application, ApplicationStatus, CoverLetter, InterviewQuestion } from '@/types'
+import type { Application, ApplicationStatus, CoverLetter, InterviewQuestion, Resume, ExtractedData } from '@/types'
+import Link from 'next/link'
 
-const TABS = ['Overview', 'Cover Letter', 'Interview Prep', 'Timeline', 'Contacts'] as const
+const TABS = ['Overview', 'Resume', 'Cover Letter', 'Interview Prep', 'Timeline', 'Contacts'] as const
 type Tab = typeof TABS[number]
+
+// AI features work off either an attached resume or a generated tailored resume.
+function hasResumeSource(app: Application) {
+  return !!app.resumeId || (app.tailoredResumes?.length ?? 0) > 0
+}
 
 const EVENT_ICONS: Record<string, string> = {
   CREATED: '🎯',
@@ -87,10 +96,251 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
 
       {/* Tab content */}
       {activeTab === 'Overview' && <OverviewTab app={app} onAppChange={setApp} />}
+      {activeTab === 'Resume' && <ResumeTab app={app} onAppChange={setApp} />}
       {activeTab === 'Cover Letter' && <CoverLetterTab app={app} onAppChange={setApp} />}
       {activeTab === 'Interview Prep' && <InterviewPrepTab app={app} onAppChange={setApp} />}
       {activeTab === 'Timeline' && <TimelineTab app={app} />}
       {activeTab === 'Contacts' && <ContactsTab app={app} onAppChange={setApp} />}
+    </div>
+  )
+}
+
+// ─── Resume source card (attach an existing resume) ─────────────────────────────
+
+function ResumeSourceCard({ app, onAppChange }: { app: Application; onAppChange: (a: Application) => void }) {
+  const [resumes, setResumes] = useState<Resume[]>([])
+  const [loading, setLoading] = useState(true)
+  const [isAttaching, setIsAttaching] = useState(false)
+
+  useEffect(() => {
+    listResumes().then(setResumes).catch(() => {}).finally(() => setLoading(false))
+  }, [])
+
+  async function handleAttach(resumeId: string) {
+    setIsAttaching(true)
+    try {
+      const updated = await updateApplication(app.id, { resumeId: resumeId || null })
+      onAppChange(updated)
+      toast.success(resumeId ? 'Resume attached' : 'Resume detached')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update resume')
+    } finally {
+      setIsAttaching(false)
+    }
+  }
+
+  return (
+    <div className="bg-card border border-border rounded-[--radius-lg] p-5 shadow-sm">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-semibold text-foreground">Resume</h2>
+        {app.resumeId && <span className="text-[10px] bg-emerald-500/10 text-emerald-600 px-2 py-0.5 rounded-full font-medium">Attached</span>}
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 size={14} className="animate-spin" /> Loading resumes…</div>
+      ) : resumes.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No resumes yet. <Link href="/resumes" className="text-primary hover:underline">Upload one</Link> to unlock AI analysis, cover letters and interview prep.
+        </p>
+      ) : (
+        <div className="flex items-center gap-2">
+          <FileText size={16} className="text-muted-foreground shrink-0" />
+          <select
+            value={app.resumeId ?? ''}
+            onChange={e => handleAttach(e.target.value)}
+            disabled={isAttaching}
+            className="flex-1 min-w-0 bg-input border border-border rounded-[--radius] px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring/20 disabled:opacity-50"
+          >
+            <option value="">— No resume attached —</option>
+            {resumes.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
+          {isAttaching && <Loader2 size={14} className="animate-spin text-muted-foreground shrink-0" />}
+        </div>
+      )}
+      <p className="text-xs text-muted-foreground mt-2">
+        {app.resumeId
+          ? 'This resume feeds AI analysis, cover letters and interview prep.'
+          : 'Attach a resume to unlock AI analysis, cover letters and interview prep.'}
+      </p>
+    </div>
+  )
+}
+
+// ─── Resume tab (AI-tailored resume generated from the master profile) ──────────
+
+function ResumeTab({ app, onAppChange }: { app: Application; onAppChange: (a: Application) => void }) {
+  const tailored = app.tailoredResumes?.[0] ?? null
+  const tailoredId = tailored?.id ?? null
+  const [draft, setDraft] = useState<ExtractedData | null>(tailored?.data ?? null)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [isSavingToLibrary, setIsSavingToLibrary] = useState(false)
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current) }, [])
+
+  async function persistDraft(data: ExtractedData) {
+    if (!tailoredId) return
+    setSaveState('saving')
+    try {
+      await updateTailoredResume(tailoredId, data)
+      setSaveState('saved')
+    } catch {
+      setSaveState('idle')
+      toast.error('Auto-save failed')
+    }
+  }
+
+  // Structured edits auto-save (debounced) so reopening keeps them.
+  function handleDraftChange(data: ExtractedData) {
+    setDraft(data)
+    setSaveState('saving')
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => persistDraft(data), 900)
+  }
+
+  async function handleSaveEdits() {
+    if (!draft) return
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    await persistDraft(draft)
+  }
+
+  async function handleGenerate() {
+    setIsGenerating(true)
+    try {
+      const result = await generateTailoredResume(app.id)
+      onAppChange(await getApplication(app.id))
+      setDraft(result.data)
+      setSaveState('saved')
+      toast.success('Tailored resume generated!')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Generation failed')
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  async function handleDownloadPdf() {
+    if (!draft) return
+    setIsDownloading(true)
+    try {
+      const { generateResumePdfBlob, resumePdfFileName } = await import('@/lib/resume-pdf')
+      const blob = await generateResumePdfBlob(draft)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = resumePdfFileName(app.companyName, app.jobTitle)
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'PDF export failed')
+    } finally {
+      setIsDownloading(false)
+    }
+  }
+
+  async function handleSaveToLibrary() {
+    if (!draft) return
+    setIsSavingToLibrary(true)
+    try {
+      const { generateResumePdfBlob, resumePdfFileName } = await import('@/lib/resume-pdf')
+      const blob = await generateResumePdfBlob(draft)
+      const fileName = resumePdfFileName(app.companyName, app.jobTitle)
+      const file = new File([blob], fileName, { type: 'application/pdf' })
+      const { presignedUrl, s3Key } = await getPresignedUrl(fileName, 'application/pdf')
+      await uploadToS3(presignedUrl, file)
+      await confirmUpload({ s3Key, fileName, fileSize: file.size, name: `Tailored — ${app.companyName} ${app.jobTitle}` })
+      toast.success('Saved to your Resumes library')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Save to library failed')
+    } finally {
+      setIsSavingToLibrary(false)
+    }
+  }
+
+  if (!draft) {
+    return (
+      <div className="bg-card border border-border rounded-[--radius-lg] p-8 text-center shadow-sm">
+        <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
+          <Sparkles size={20} className="text-muted-foreground" />
+        </div>
+        <p className="text-sm font-medium text-foreground mb-1">No tailored resume yet</p>
+        <p className="text-xs text-muted-foreground mb-4 max-w-md mx-auto">
+          Generate a resume from your profile, automatically matched to this job&apos;s description. It uses only facts already in your profile — nothing is invented. You&apos;ll need some profile content first.
+        </p>
+        <button
+          onClick={handleGenerate}
+          disabled={isGenerating}
+          className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-[--radius] text-sm font-medium transition-colors"
+        >
+          {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+          Generate from profile
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-foreground">Tailored Resume</h2>
+            <span className="text-[11px] text-muted-foreground">
+              {saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? 'Saved' : ''}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">AI-generated from your profile, matched to this job. Edits save automatically.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={handleSaveEdits}
+            disabled={saveState === 'saving'}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-muted hover:bg-accent border border-border text-foreground rounded-[--radius] text-xs font-medium transition-colors disabled:opacity-50"
+          >
+            {saveState === 'saving' ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+            Save edits
+          </button>
+          <button
+            onClick={handleDownloadPdf}
+            disabled={isDownloading}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-muted hover:bg-accent border border-border text-foreground rounded-[--radius] text-xs font-medium transition-colors disabled:opacity-50"
+          >
+            {isDownloading ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+            Download PDF
+          </button>
+          <button
+            onClick={handleSaveToLibrary}
+            disabled={isSavingToLibrary}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-muted hover:bg-accent border border-border text-foreground rounded-[--radius] text-xs font-medium transition-colors disabled:opacity-50"
+            title="Generate a PDF and save it into your Resumes library"
+          >
+            {isSavingToLibrary ? <Loader2 size={12} className="animate-spin" /> : <FileText size={12} />}
+            Save to Resumes
+          </button>
+          <button
+            onClick={handleGenerate}
+            disabled={isGenerating}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-[--radius] text-xs font-medium transition-colors"
+          >
+            {isGenerating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+            Regenerate
+          </button>
+        </div>
+      </div>
+
+      {app.resumeId && (
+        <p className="text-xs text-amber-700 bg-amber-500/10 border border-amber-500/20 rounded-[--radius] px-3 py-2">
+          An uploaded resume is attached, so AI analysis, cover letters and interview prep use that. This tailored resume is here to review, download, or save to your library.
+        </p>
+      )}
+
+      <div className="bg-card border border-border rounded-[--radius-lg] p-5 shadow-sm">
+        <ExtractedDataEditor data={draft} onChange={handleDraftChange} />
+      </div>
     </div>
   )
 }
@@ -104,7 +354,7 @@ function OverviewTab({ app, onAppChange }: { app: Application; onAppChange: (a: 
   const [isSavingNotes, setIsSavingNotes] = useState(false)
 
   async function handleAnalyze() {
-    if (!app.resumeId) { toast.error('Attach a resume first to analyze this application'); return }
+    if (!hasResumeSource(app)) { toast.error('Attach a resume or generate one from your profile (Resume tab) first'); return }
     setIsAnalyzing(true)
     try {
       await analyzeApplication(app.id)
@@ -145,6 +395,9 @@ function OverviewTab({ app, onAppChange }: { app: Application; onAppChange: (a: 
 
   return (
     <div className="space-y-5">
+      {/* Resume source */}
+      <ResumeSourceCard app={app} onAppChange={onAppChange} />
+
       {/* Job details + status */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         <div className="md:col-span-2 bg-card border border-border rounded-[--radius-lg] p-5 shadow-sm space-y-3">
@@ -288,7 +541,7 @@ function OverviewTab({ app, onAppChange }: { app: Application; onAppChange: (a: 
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">
-            {app.resumeId ? 'Run an analysis to see how well your resume matches this job.' : 'Attach a resume to this application first, then run an AI analysis.'}
+            {hasResumeSource(app) ? 'Run an analysis to see how well your resume matches this job.' : 'Attach a resume (Overview) or generate one from your profile (Resume tab) first, then run an AI analysis.'}
           </p>
         )}
       </div>
@@ -358,17 +611,31 @@ function CoverLetterTab({ app, onAppChange }: { app: Application; onAppChange: (
     }
   }
 
+  // Client-side download from state — the access token lives in memory, so a plain
+  // <a href> to the API can't send it (would 401). The content is already here anyway.
+  function handleDownload() {
+    const blob = new Blob([content], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `cover-letter-${app.companyName.replace(/\s+/g, '-').toLowerCase()}.txt`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
   function handleSelectVersion(letter: CoverLetter) {
     setSelectedId(letter.id)
     setContent(letter.content)
   }
 
-  if (!app.resumeId) {
+  if (!hasResumeSource(app)) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <FileText size={32} className="text-muted-foreground mb-3" />
-        <p className="text-sm font-medium text-foreground mb-1">No resume attached</p>
-        <p className="text-xs text-muted-foreground">Attach a resume to this application to generate a cover letter.</p>
+        <p className="text-sm font-medium text-foreground mb-1">No resume yet</p>
+        <p className="text-xs text-muted-foreground">Attach a resume (Overview) or generate one from your profile (Resume tab) to write a cover letter.</p>
       </div>
     )
   }
@@ -390,13 +657,12 @@ function CoverLetterTab({ app, onAppChange }: { app: Application; onAppChange: (
                   {isSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
                   Save
                 </button>
-                <a
-                  href={`${process.env.NEXT_PUBLIC_API_URL}/api/v1/cover-letters/${selectedId}/download`}
-                  download
+                <button
+                  onClick={handleDownload}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-muted hover:bg-accent border border-border text-foreground rounded-[--radius] text-xs font-medium transition-colors"
                 >
                   <Download size={12} /> Download
-                </a>
+                </button>
               </>
             )}
             <button
@@ -474,10 +740,10 @@ function InterviewPrepTab({ app, onAppChange }: { app: Application; onAppChange:
     }
   }
 
-  if (!app.resumeId) {
+  if (!hasResumeSource(app)) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <p className="text-sm text-muted-foreground">Attach a resume first to generate interview prep.</p>
+        <p className="text-sm text-muted-foreground">Attach a resume (Overview) or generate one from your profile (Resume tab) to generate interview prep.</p>
       </div>
     )
   }

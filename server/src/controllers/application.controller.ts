@@ -99,3 +99,11 @@ export async function generateInterviewQuestions(req: Request, res: Response) {
   );
   res.status(201).json({ success: true, data: interviewPrep });
 }
+
+export async function generateTailoredResume(req: Request, res: Response) {
+  const tailoredResume = await aiService.generateTailoredResume(
+    req.params['id'] as string,
+    req.user!.userId
+  );
+  res.status(201).json({ success: true, data: tailoredResume });
+}

@@ -1,5 +1,5 @@
 import { apiFetch } from './client'
-import type { Application, ApplicationStatus } from '@/types'
+import type { Application, ApplicationStatus, TailoredResume, ExtractedData } from '@/types'
 
 export interface ListApplicationsParams {
   status?: ApplicationStatus
@@ -45,7 +45,7 @@ export interface CreateApplicationData {
   deadline?: string
   jobDescription?: string
   jobUrl?: string
-  resumeId?: string
+  resumeId?: string | null // null explicitly detaches the resume (server accepts nullish)
   salaryMin?: number
   salaryMax?: number
   notes?: string
@@ -113,6 +113,23 @@ export async function updateCoverLetter(id: string, content: string): Promise<vo
     const json = await res.json()
     throw new Error(json.error?.message ?? 'Failed to save cover letter')
   }
+}
+
+export async function generateTailoredResume(id: string): Promise<TailoredResume> {
+  const res = await apiFetch(`/api/v1/applications/${id}/tailored-resume`, { method: 'POST' })
+  const json = await res.json()
+  if (!json.success) throw new Error(json.error?.message ?? 'Tailored resume generation failed')
+  return json.data
+}
+
+export async function updateTailoredResume(id: string, data: ExtractedData): Promise<TailoredResume> {
+  const res = await apiFetch(`/api/v1/tailored-resumes/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  })
+  const json = await res.json()
+  if (!json.success) throw new Error(json.error?.message ?? 'Failed to save tailored resume')
+  return json.data
 }
 
 export async function generateInterviewPrep(id: string): Promise<{

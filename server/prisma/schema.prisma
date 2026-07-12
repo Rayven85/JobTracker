@@ -132,11 +132,12 @@ model Application {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  events        ApplicationEvent[]
-  coverLetters  CoverLetter[]
-  interviewPrep InterviewPrep?
-  contacts      Contact[]
-  tags          ApplicationTag[]
+  events          ApplicationEvent[]
+  coverLetters    CoverLetter[]
+  tailoredResumes TailoredResume[]
+  interviewPrep   InterviewPrep?
+  contacts        Contact[]
+  tags            ApplicationTag[]
 
   @@index([userId])
   @@index([userId, status])
@@ -153,6 +154,7 @@ enum EventType {
   COVER_LETTER_GENERATED
   ANALYSIS_COMPLETED
   INTERVIEW_PREP_GENERATED
+  TAILORED_RESUME_GENERATED
   MANUAL_NOTE
 }
 
@@ -189,6 +191,25 @@ model CoverLetter {
 
   @@index([applicationId])
   @@map("cover_letters")
+}
+
+// AI-generated resume tailored to this application's job description, built from the
+// user's master profile. data holds the ExtractedProfile shape (same as UserProfile),
+// so it renders/edits with the shared ExtractedDataEditor.
+model TailoredResume {
+  id            String      @id @default(uuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  data     Json    // ExtractedProfile shape: { name, email, phone, location, summary, skills, education, experience, certifications }
+  version  Int     @default(1)
+  isActive Boolean @default(true) // only one active version per application
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([applicationId])
+  @@map("tailored_resumes")
 }
 
 // ─── INTERVIEW PREP ─────────────────────────────────────────────────────────

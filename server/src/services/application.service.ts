@@ -113,6 +113,11 @@ export async function getApplication(applicationId: string, userId: string) {
       createdAt: true,
       updatedAt: true,
       resume: { select: { id: true, name: true, fileName: true } },
+      tailoredResumes: {
+        where: { isActive: true },
+        select: { id: true, data: true, version: true, updatedAt: true },
+        take: 1,
+      },
       coverLetters: {
         select: { id: true, version: true, isActive: true, createdAt: true },
         orderBy: { createdAt: 'desc' },

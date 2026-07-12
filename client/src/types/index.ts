@@ -114,6 +114,8 @@ export interface Application {
   jobDescription: string | null
   jobUrl: string | null
   resumeId: string | null
+  resume: { id: string; name: string; fileName: string } | null
+  tailoredResumes: TailoredResume[]
   salaryMin: number | null
   salaryMax: number | null
   notes: string | null
@@ -125,6 +127,15 @@ export interface Application {
   coverLetters: CoverLetter[]
   interviewPrep: { questions: InterviewQuestion[] } | null
   createdAt: string
+  updatedAt: string
+}
+
+// AI-generated resume tailored to an application's job description, built from the master
+// profile. `data` is the same shape as a resume's extracted data, so it edits with ExtractedDataEditor.
+export interface TailoredResume {
+  id: string
+  data: ExtractedData
+  version: number
   updatedAt: string
 }
 

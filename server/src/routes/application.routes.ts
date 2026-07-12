@@ -30,3 +30,4 @@ applicationRouter.post('/:id/contacts', validate(createContactSchema), asyncHand
 applicationRouter.post('/:id/analyze', asyncHandler(applicationController.analyzeApplication));
 applicationRouter.post('/:id/cover-letter', validate(coverLetterRequestSchema), asyncHandler(applicationController.generateCoverLetter));
 applicationRouter.post('/:id/interview-prep', asyncHandler(applicationController.generateInterviewQuestions));
+applicationRouter.post('/:id/tailored-resume', asyncHandler(applicationController.generateTailoredResume));
