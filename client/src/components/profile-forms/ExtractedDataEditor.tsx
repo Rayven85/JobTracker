@@ -8,18 +8,14 @@ import { EducationForm } from './EducationForm'
 import { CertificationForm } from './CertificationForm'
 import { HeroFieldsForm, type HeroFields } from './HeroFieldsForm'
 import { SkillsEditor } from './SkillsEditor'
+import { descriptionToLines, formatMonthYear } from '@/lib/resume-format'
 
 type EditTarget = { index: number | null } | null
 
 const addBtnCls = 'flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-[--radius] transition-colors'
 const iconBtnCls = 'p-1 text-muted-foreground hover:text-foreground transition-colors'
 
-function formatDate(date: string | null, isCurrent: boolean) {
-  if (isCurrent) return 'Present'
-  if (!date) return ''
-  const [year, month] = date.split('-')
-  return new Date(Number(year), Number(month) - 1).toLocaleDateString('en-NZ', { month: 'short', year: 'numeric' })
-}
+const formatDate = (date: string | null, isCurrent: boolean) => formatMonthYear(date, isCurrent)
 
 // Self-contained editor for a resume's structured (AI-extracted) data.
 // Holds its own edit-modal state; emits the full updated object via onChange.
@@ -107,9 +103,9 @@ export function ExtractedDataEditor({ data, onChange }: { data: ExtractedData; o
                       <button onClick={() => deleteExp(i)} className={`${iconBtnCls} hover:text-destructive opacity-0 group-hover:opacity-100`} title="Delete"><Trash2 size={12} /></button>
                     </div>
                   </div>
-                  {exp.description && (
+                  {descriptionToLines(exp.description).length > 0 && (
                     <ul className="mt-1 space-y-0.5">
-                      {exp.description.split('\n').filter(Boolean).map((line, j) => (
+                      {descriptionToLines(exp.description).map((line, j) => (
                         <li key={j} className="text-xs text-muted-foreground leading-relaxed">{line.startsWith('•') ? line : `• ${line}`}</li>
                       ))}
                     </ul>

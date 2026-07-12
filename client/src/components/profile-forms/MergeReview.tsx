@@ -5,6 +5,7 @@ import { Loader2, GitMerge, ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ExperienceMergeMatch, ProfileExperience } from '@/types'
 import { inputCls, primaryBtn, secondaryBtn } from './styles'
+import { descriptionToLines } from '@/lib/resume-format'
 
 export interface MergeReviewResult {
   experienceMerges: { existingIndex: number; merged: ProfileExperience }[]
@@ -21,7 +22,7 @@ interface MergeReviewProps {
 }
 
 function Bullets({ description }: { description: string }) {
-  const lines = description.split('\n').filter(Boolean)
+  const lines = descriptionToLines(description)
   if (lines.length === 0) return <p className="text-xs text-muted-foreground italic">No description</p>
   return (
     <ul className="space-y-0.5">

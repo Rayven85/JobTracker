@@ -3,6 +3,7 @@
 // the initial bundle. One default single-column template for now; more are backlogged.
 import { Document, Page, View, Text, StyleSheet, pdf } from '@react-pdf/renderer'
 import type { ExtractedData } from '@/types'
+import { descriptionToLines, formatMonthYear } from '@/lib/resume-format'
 
 const styles = StyleSheet.create({
   page: { paddingVertical: 40, paddingHorizontal: 44, fontFamily: 'Helvetica', fontSize: 10, color: '#1a1a1a', lineHeight: 1.4 },
@@ -24,16 +25,12 @@ const styles = StyleSheet.create({
 })
 
 function formatPeriod(start: string | null, end: string | null, current: boolean): string {
-  const right = current ? 'Present' : (end ?? '')
-  return [start ?? '', right].filter(Boolean).join(' – ')
+  const right = current ? 'Present' : formatMonthYear(end)
+  return [formatMonthYear(start), right].filter(Boolean).join(' – ')
 }
 
-function bulletsOf(description: string): string[] {
-  return description
-    .split('\n')
-    .map(l => l.trim())
-    .filter(Boolean)
-    .map(l => (l.startsWith('•') ? l.replace(/^•\s*/, '') : l))
+function bulletsOf(description: unknown): string[] {
+  return descriptionToLines(description).map(l => (l.startsWith('•') ? l.replace(/^•\s*/, '') : l))
 }
 
 function ResumePdf({ data }: { data: ExtractedData }) {

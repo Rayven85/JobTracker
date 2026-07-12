@@ -51,6 +51,15 @@ async function createWithRetry(body: CompletionBody): Promise<Groq.Chat.ChatComp
           'The AI service hit its rate limit (free tier). Please wait a minute and try again.'
         );
       }
+      // 401 = bad/expired GROQ_API_KEY (server misconfig, not a user auth problem). Return 500
+      // with a clear message rather than leaking Groq's raw JSON or tripping the client's 401 → re-login flow.
+      if (status === 401) {
+        throw new AppError(
+          500,
+          'AI_AUTH_ERROR',
+          'The AI API key is invalid or expired. Check GROQ_API_KEY on the server and restart it.'
+        );
+      }
       throw err;
     }
   }

@@ -10,6 +10,7 @@ import { EducationForm } from '@/components/profile-forms/EducationForm'
 import { CertificationForm } from '@/components/profile-forms/CertificationForm'
 import { HeroFieldsForm, type HeroFields } from '@/components/profile-forms/HeroFieldsForm'
 import { SkillsEditor } from '@/components/profile-forms/SkillsEditor'
+import { descriptionToLines, formatMonthYear } from '@/lib/resume-format'
 import { MergeReview, type MergeReviewResult } from '@/components/profile-forms/MergeReview'
 
 const addBtnCls = 'flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-[--radius] transition-colors'
@@ -20,13 +21,7 @@ function initials(name: string | null) {
   return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
 }
 
-function formatDate(date: string | null, isCurrent: boolean) {
-  if (isCurrent) return 'Present'
-  if (!date) return ''
-  const [year, month] = date.split('-')
-  const d = new Date(Number(year), Number(month) - 1)
-  return d.toLocaleDateString('en-NZ', { month: 'short', year: 'numeric' })
-}
+const formatDate = (date: string | null, isCurrent: boolean) => formatMonthYear(date, isCurrent)
 
 // ─── Suggestion Banner ────────────────────────────────────────────────────────
 
@@ -460,9 +455,9 @@ export default function ProfilePage() {
                         <button onClick={() => deleteItem('experience', i, 'experience')} className={`${iconBtnCls} hover:text-destructive opacity-0 group-hover:opacity-100`} title="Delete"><Trash2 size={13} /></button>
                       </div>
                     </div>
-                    {exp.description && (
+                    {descriptionToLines(exp.description).length > 0 && (
                       <ul className="mt-1.5 space-y-0.5">
-                        {exp.description.split('\n').filter(Boolean).map((line, j) => (
+                        {descriptionToLines(exp.description).map((line, j) => (
                           <li key={j} className="text-xs text-muted-foreground leading-relaxed">
                             {line.startsWith('•') ? line : `• ${line}`}
                           </li>
