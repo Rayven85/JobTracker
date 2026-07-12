@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, use } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, ExternalLink, Loader2, ChevronDown, ChevronRight,
-  Sparkles, FileText, Download, Save, Plus, Trash2,
+  Sparkles, FileText, Download, Save, Plus, Trash2, Eye, X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -18,7 +18,7 @@ import { listResumes, getPresignedUrl, uploadToS3, confirmUpload } from '@/lib/a
 import { ExtractedDataEditor } from '@/components/profile-forms/ExtractedDataEditor'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { ALL_STATUSES, STATUS_LABELS, PIPELINE_STATUSES, getStatusColors } from '@/lib/status'
-import type { Application, ApplicationStatus, CoverLetter, InterviewQuestion, Resume, ExtractedData } from '@/types'
+import type { Application, ApplicationStatus, CoverLetter, InterviewQuestion, Resume, ExtractedData, MatchAnalysis } from '@/types'
 import Link from 'next/link'
 
 const TABS = ['Overview', 'Resume', 'Cover Letter', 'Interview Prep', 'Timeline', 'Contacts'] as const
@@ -27,6 +27,34 @@ type Tab = typeof TABS[number]
 // AI features work off either an attached resume or a generated tailored resume.
 function hasResumeSource(app: Application) {
   return !!app.resumeId || (app.tailoredResumes?.length ?? 0) > 0
+}
+
+const CARD_ACCENT: Record<'emerald' | 'rose' | 'amber', string> = {
+  emerald: 'border-l-emerald-500',
+  rose: 'border-l-rose-400',
+  amber: 'border-l-amber-400',
+}
+
+// Click-to-expand card for AI analysis strengths / gaps / suggestions. Non-expandable
+// (plain row) when there's no detail — e.g. older analyses whose suggestions were strings.
+function ExpandableCard({ title, detail, accent }: { title: string; detail: string; accent: 'emerald' | 'rose' | 'amber' }) {
+  const [open, setOpen] = useState(false)
+  const hasDetail = detail.trim().length > 0
+  return (
+    <div className={cn('border border-border border-l-2 rounded-[--radius] bg-background/50 overflow-hidden', CARD_ACCENT[accent])}>
+      <button
+        type="button"
+        onClick={() => hasDetail && setOpen(o => !o)}
+        className={cn('w-full flex items-center justify-between gap-2 px-3 py-2 text-left', hasDetail && 'cursor-pointer hover:bg-muted/50 transition-colors')}
+      >
+        <span className="text-xs font-medium text-foreground">{title}</span>
+        {hasDetail && <ChevronDown size={14} className={cn('text-muted-foreground shrink-0 transition-transform', open && 'rotate-180')} />}
+      </button>
+      {open && hasDetail && (
+        <p className="px-3 pb-2.5 -mt-0.5 text-xs text-muted-foreground leading-relaxed">{detail}</p>
+      )}
+    </div>
+  )
 }
 
 const EVENT_ICONS: Record<string, string> = {
@@ -175,10 +203,32 @@ function ResumeTab({ app, onAppChange }: { app: Application; onAppChange: (a: Ap
   const [isGenerating, setIsGenerating] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const [isSavingToLibrary, setIsSavingToLibrary] = useState(false)
+  const [isPreviewing, setIsPreviewing] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current) }, [])
+  // Revoke the previous object URL whenever it changes or the tab unmounts.
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }, [previewUrl])
+
+  function closePreview() {
+    setPreviewUrl(null)
+  }
+
+  async function handlePreview() {
+    if (!draft) return
+    setIsPreviewing(true)
+    try {
+      const { generateResumePdfBlob } = await import('@/lib/resume-pdf')
+      const blob = await generateResumePdfBlob(draft)
+      setPreviewUrl(URL.createObjectURL(blob))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'PDF preview failed')
+    } finally {
+      setIsPreviewing(false)
+    }
+  }
 
   async function persistDraft(data: ExtractedData) {
     if (!tailoredId) return
@@ -305,6 +355,14 @@ function ResumeTab({ app, onAppChange }: { app: Application; onAppChange: (a: Ap
             Save edits
           </button>
           <button
+            onClick={handlePreview}
+            disabled={isPreviewing}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-muted hover:bg-accent border border-border text-foreground rounded-[--radius] text-xs font-medium transition-colors disabled:opacity-50"
+          >
+            {isPreviewing ? <Loader2 size={12} className="animate-spin" /> : <Eye size={12} />}
+            Preview
+          </button>
+          <button
             onClick={handleDownloadPdf}
             disabled={isDownloading}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-muted hover:bg-accent border border-border text-foreground rounded-[--radius] text-xs font-medium transition-colors disabled:opacity-50"
@@ -341,6 +399,31 @@ function ResumeTab({ app, onAppChange }: { app: Application; onAppChange: (a: Ap
       <div className="bg-card border border-border rounded-[--radius-lg] p-5 shadow-sm">
         <ExtractedDataEditor data={draft} onChange={handleDraftChange} />
       </div>
+
+      {/* PDF preview modal — same output as Download/Save, shown before committing */}
+      {previewUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={e => { if (e.target === e.currentTarget) closePreview() }}>
+          <div className="bg-card border border-border rounded-[--radius-lg] shadow-xl w-full max-w-3xl h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-border shrink-0">
+              <h2 className="text-sm font-semibold text-foreground">PDF Preview</h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleDownloadPdf}
+                  disabled={isDownloading}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground rounded-[--radius] text-xs font-medium transition-colors"
+                >
+                  {isDownloading ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+                  Download
+                </button>
+                <button onClick={closePreview} className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-[--radius] transition-colors">
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+            <iframe src={previewUrl} title="Resume PDF preview" className="flex-1 w-full rounded-b-[--radius-lg]" />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -506,37 +589,78 @@ function OverviewTab({ app, onAppChange }: { app: Application; onAppChange: (a: 
 
             {/* Analysis breakdown */}
             {app.matchAnalysis && (() => {
+              const raw = app.matchAnalysis
+              let analysis: MatchAnalysis | null = null
               try {
-                const analysis = JSON.parse(app.matchAnalysis)
-                return (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                analysis = (typeof raw === 'string' ? JSON.parse(raw) : raw) as MatchAnalysis
+              } catch { analysis = null }
+              if (!analysis) return null
+              const suggestions = (analysis.suggestions ?? []).map(s =>
+                typeof s === 'string' ? { title: s, detail: '' } : s
+              )
+              return (
+                <div className="space-y-4">
+                  {analysis.summary && (
+                    <p className="text-sm text-foreground leading-relaxed bg-muted/40 border border-border rounded-[--radius] px-3 py-2.5">
+                      {analysis.summary}
+                    </p>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <p className="text-xs font-medium text-emerald-700 mb-2">✓ Matched Skills</p>
                       <div className="flex flex-wrap gap-1.5">
-                        {(analysis.matched ?? []).map((s: string) => (
+                        {(analysis.matched ?? []).map(s => (
                           <span key={s} className="text-xs px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full">{s}</span>
                         ))}
+                        {!analysis.matched?.length && <span className="text-xs text-muted-foreground">None identified.</span>}
                       </div>
                     </div>
                     <div>
                       <p className="text-xs font-medium text-rose-600 mb-2">✗ Missing Skills</p>
                       <div className="flex flex-wrap gap-1.5">
-                        {(analysis.missing ?? []).map((s: string) => (
+                        {(analysis.missing ?? []).map(s => (
                           <span key={s} className="text-xs px-2 py-0.5 bg-rose-50 text-rose-600 rounded-full">{s}</span>
+                        ))}
+                        {!analysis.missing?.length && <span className="text-xs text-muted-foreground">None identified.</span>}
+                      </div>
+                    </div>
+                  </div>
+
+                  {analysis.strengths?.length ? (
+                    <div>
+                      <p className="text-xs font-semibold text-foreground mb-2">Why you&apos;re a fit</p>
+                      <div className="space-y-1.5">
+                        {analysis.strengths.map((s, i) => (
+                          <ExpandableCard key={i} title={s.title} detail={s.detail} accent="emerald" />
                         ))}
                       </div>
                     </div>
+                  ) : null}
+
+                  {analysis.gaps?.length ? (
                     <div>
-                      <p className="text-xs font-medium text-amber-700 mb-2">💡 Suggestions</p>
-                      <ul className="space-y-1">
-                        {(analysis.suggestions ?? []).map((s: string, i: number) => (
-                          <li key={i} className="text-xs text-foreground">{s}</li>
+                      <p className="text-xs font-semibold text-foreground mb-2">Where you fall short</p>
+                      <div className="space-y-1.5">
+                        {analysis.gaps.map((g, i) => (
+                          <ExpandableCard key={i} title={g.title} detail={g.detail} accent="rose" />
                         ))}
-                      </ul>
+                      </div>
                     </div>
-                  </div>
-                )
-              } catch { return null }
+                  ) : null}
+
+                  {suggestions.length ? (
+                    <div>
+                      <p className="text-xs font-semibold text-foreground mb-2">How to improve</p>
+                      <div className="space-y-1.5">
+                        {suggestions.map((s, i) => (
+                          <ExpandableCard key={i} title={s.title} detail={s.detail} accent="amber" />
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              )
             })()}
           </div>
         ) : (

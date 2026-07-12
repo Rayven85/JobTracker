@@ -86,8 +86,18 @@ async function getApplicationWithResume(applicationId: string, userId: string) {
 // ─── Pure AI calls (swap provider by editing ai.ts only — do not touch these) ──
 
 async function callAnalyze(resumeText: string, jobDescription: string) {
-  return generateJSON<{ score: number; matched: string[]; missing: string[]; suggestions: string[] }>(
-    `You are an expert technical recruiter helping a candidate assess their job application fit.
+  return generateJSON<{
+    score: number;
+    summary: string;
+    matched: string[];
+    missing: string[];
+    strengths: { title: string; detail: string }[];
+    gaps: { title: string; detail: string }[];
+    suggestions: { title: string; detail: string }[];
+  }>(
+    `You are an expert technical recruiter giving a candidate a detailed, honest assessment of how well
+their resume fits a specific job. Be specific and reference concrete evidence from BOTH the resume and
+the job description — no generic filler.
 
 CANDIDATE RESUME:
 ${resumeText}
@@ -95,14 +105,31 @@ ${resumeText}
 JOB DESCRIPTION:
 ${jobDescription}
 
-Analyze the match and return JSON with exactly these keys:
+Return JSON with exactly these keys:
 {
-  "score": <integer 0-100 representing overall fit>,
-  "matched": [<keywords/skills present in both resume and JD>],
-  "missing": [<important keywords/skills in JD not in resume>],
-  "suggestions": [<specific, actionable resume improvement suggestions>]
-}`,
-    2500
+  "score": <integer 0-100 overall fit>,
+  "summary": "<2-4 sentence overall verdict: how strong the fit is and why, in plain language>",
+  "matched": [<concise skills/keywords present in BOTH resume and JD>],
+  "missing": [<concise important skills/keywords the JD wants that are absent or weak in the resume>],
+  "strengths": [
+    { "title": "<short label, e.g. 'Directly relevant backend experience'>",
+      "detail": "<2-4 sentences: WHY this is a strength for THIS role — cite specifics from the resume and how they map to the JD's requirements>" }
+  ],
+  "gaps": [
+    { "title": "<short label, e.g. 'No demonstrated Kubernetes experience'>",
+      "detail": "<2-4 sentences: what the JD asks for, why the resume falls short, and how much it matters for this role>" }
+  ],
+  "suggestions": [
+    { "title": "<short actionable label>",
+      "detail": "<2-4 sentences: a concrete, specific improvement — what to add/reword/emphasise and why it helps for this job>" }
+  ]
+}
+
+Guidance:
+- Provide 3-6 items each for "strengths", "gaps", and "suggestions". Order each from most to least important.
+- Ground every "detail" in real content — quote or paraphrase actual resume/JD points. Never invent experience the candidate does not have.
+- If the resume is a strong fit, still surface honest gaps; if weak, still surface genuine strengths.`,
+    4000
   );
 }
 

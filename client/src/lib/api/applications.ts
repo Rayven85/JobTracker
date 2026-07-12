@@ -1,5 +1,5 @@
 import { apiFetch } from './client'
-import type { Application, ApplicationStatus, TailoredResume, ExtractedData } from '@/types'
+import type { Application, ApplicationStatus, TailoredResume, ExtractedData, MatchAnalysis } from '@/types'
 
 export interface ListApplicationsParams {
   status?: ApplicationStatus
@@ -83,9 +83,7 @@ export async function deleteApplication(id: string): Promise<void> {
   }
 }
 
-export async function analyzeApplication(id: string): Promise<{
-  score: number; matched: string[]; missing: string[]; suggestions: string[]
-}> {
+export async function analyzeApplication(id: string): Promise<MatchAnalysis> {
   const res = await apiFetch(`/api/v1/applications/${id}/analyze`, { method: 'POST' })
   const json = await res.json()
   if (!json.success) throw new Error(json.error?.message ?? 'AI analysis failed')

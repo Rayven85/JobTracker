@@ -120,7 +120,7 @@ export interface Application {
   salaryMax: number | null
   notes: string | null
   matchScore: number | null
-  matchAnalysis: string | null
+  matchAnalysis: MatchAnalysis | string | null
   tags: Tag[]
   contacts: Contact[]
   events: ApplicationEvent[]
@@ -128,6 +128,23 @@ export interface Application {
   interviewPrep: { questions: InterviewQuestion[] } | null
   createdAt: string
   updatedAt: string
+}
+
+// AI match-analysis result stored on Application.matchAnalysis. Older records only have
+// matched/missing/suggestions(string[]); newer ones add summary/strengths/gaps and richer
+// suggestions — the UI renders defensively so both shapes work.
+export interface MatchDetail {
+  title: string
+  detail: string
+}
+export interface MatchAnalysis {
+  score?: number
+  summary?: string | null
+  matched?: string[]
+  missing?: string[]
+  strengths?: MatchDetail[]
+  gaps?: MatchDetail[]
+  suggestions?: (string | MatchDetail)[]
 }
 
 // AI-generated resume tailored to an application's job description, built from the master

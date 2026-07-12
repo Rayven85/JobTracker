@@ -283,7 +283,10 @@ Plain text output (cover letters) — omit generationConfig, call result.respons
 Three AI service methods (signatures never change regardless of provider):
 
 analyzeApplication(resumeText, jobDescription):
-  Returns: { score: number, matched: string[], missing: string[], suggestions: string[] }
+  Returns: { score: number, summary: string, matched: string[], missing: string[],
+             strengths: {title,detail}[], gaps: {title,detail}[], suggestions: {title,detail}[] }
+  (client renders strengths/gaps/suggestions as click-to-expand cards; tolerates the old
+   {matched,missing,suggestions:string[]} shape for pre-existing analyses)
 
 generateCoverLetter(resumeText, jobDescription, applicantName, companyName, jobTitle):
   Returns: string (plain text, ~300 words, ready to display in textarea)
