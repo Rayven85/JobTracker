@@ -38,6 +38,13 @@ jobs:
       - name: Install server dependencies
         run: cd server && npm ci
 
+      # Prisma 7 has no postinstall auto-generate — without this, every suite fails at
+      # import with "Cannot find module '.prisma/client'".
+      - name: Generate Prisma client
+        run: cd server && npx prisma generate
+        env:
+          DATABASE_URL: postgresql://jobtracker:password@localhost:5432/jobtracker_test
+
       - name: Run Prisma migrations
         run: cd server && npx prisma migrate deploy
         env:
@@ -97,6 +104,11 @@ jobs:
 
       - name: Install server dependencies
         run: cd server && npm ci
+
+      # generate never connects to the DB; prisma.config.ts just needs a non-null URL
+      # (same trick as server/Dockerfile.prod).
+      - name: Generate Prisma client
+        run: cd server && DATABASE_URL="postgresql://x:x@localhost:5432/x" npx prisma generate
 
       - name: TypeScript check (server)
         run: cd server && npx tsc --noEmit
