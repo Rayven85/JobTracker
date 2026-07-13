@@ -4,20 +4,33 @@ import { Suspense, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { setAccessToken } from '@/lib/token'
-import { getMe } from '@/lib/api/auth'
+import { getMe, refreshAccessToken } from '@/lib/api/auth'
 
 function CallbackInner() {
   const searchParams = useSearchParams()
   const router = useRouter()
 
   useEffect(() => {
-    const token = searchParams.get('token')
-    if (!token) { router.replace('/login'); return }
+    async function completeSignIn() {
+      // The OAuth callback sets the HttpOnly refresh cookie and redirects here with no
+      // token in the URL — exchange the cookie for an access token. (Legacy ?token=
+      // param still honoured during rollout.)
+      let token = searchParams.get('token')
+      if (!token) {
+        const refreshed = await refreshAccessToken()
+        token = refreshed?.accessToken ?? null
+      }
+      if (!token) { router.replace('/login'); return }
 
-    setAccessToken(token)
-    getMe(token)
-      .then(() => router.replace('/dashboard'))
-      .catch(() => router.replace('/login'))
+      setAccessToken(token)
+      try {
+        await getMe(token)
+        router.replace('/dashboard')
+      } catch {
+        router.replace('/login')
+      }
+    }
+    completeSignIn()
   }, [searchParams, router])
 
   return (

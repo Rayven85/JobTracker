@@ -1,12 +1,6 @@
 import { Request, Response } from 'express';
 import * as authService from '../services/auth.service';
-
-const COOKIE_OPTS = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax' as const,
-  maxAge: 7 * 24 * 60 * 60 * 1000,
-};
+import { REFRESH_COOKIE_OPTS as COOKIE_OPTS } from '../lib/cookies';
 
 export async function register(req: Request, res: Response) {
   const { email, password, name } = req.body;

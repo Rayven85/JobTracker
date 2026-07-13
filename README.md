@@ -96,8 +96,8 @@ cd ../client && npm install
 # server/.env
 cp server/.env.example server/.env   # then fill in values (see below)
 
-# client/.env.local
-echo "NEXT_PUBLIC_API_URL=http://localhost:4000" > client/.env.local
+# client — no env needed: API calls are relative and next.config.ts
+# proxies /api/* to http://localhost:4000 in development
 ```
 
 ### 3. Set up the database
@@ -166,8 +166,23 @@ CI runs both suites on every push — the server suite against a real Postgres s
 | `PORT` | API port (default `4000`) |
 | `NODE_ENV` | `development` / `production` / `test` |
 
-### `client/.env.local`
+### Client
 
-| Variable | Description |
-|---|---|
-| `NEXT_PUBLIC_API_URL` | e.g. `http://localhost:4000` |
+No env vars needed in development. All API calls are same-origin (`/api/v1/...`) and
+`next.config.ts` rewrites them to the Express server — this keeps the HttpOnly refresh
+cookie first-party in every browser (a cross-site cookie between `*.vercel.app` and
+`*.railway.app` would be rejected, Safari blocks third-party cookies entirely).
+
+| Variable | Where | Description |
+|---|---|---|
+| `API_PROXY_URL` | Vercel (server-side) | Rewrite destination in production, e.g. the Railway API URL. Defaults to `http://localhost:4000` in dev |
+| `NEXT_PUBLIC_API_URL` | optional | Only to bypass the proxy with direct cross-origin calls (not recommended — breaks the cookie flow) |
+
+### Production deployment notes
+
+- **Vercel (client):** set `API_PROXY_URL` to the Railway API URL; do not set `NEXT_PUBLIC_API_URL`.
+- **Railway (API):** `SERVER_URL` must be the **client origin** (the Vercel URL) so the
+  Google OAuth callback goes through the proxy and its cookie lands on the client origin;
+  `CLIENT_URL` is the Vercel URL as well.
+- **Google Cloud console:** the authorised redirect URI is
+  `https://<client-domain>/api/v1/auth/google/callback`.

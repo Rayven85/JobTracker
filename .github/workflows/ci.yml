@@ -118,5 +118,3 @@ jobs:
 
       - name: Build client
         run: cd client && npm run build
-        env:
-          NEXT_PUBLIC_API_URL: http://localhost:4000

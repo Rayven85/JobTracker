@@ -117,7 +117,7 @@ export default function LoginPage() {
 
         {/* Google OAuth */}
         <a
-          href={`${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/google`}
+          href={`${process.env.NEXT_PUBLIC_API_URL ?? ''}/api/v1/auth/google`}
           className="flex w-full items-center justify-center gap-2 px-4 py-2 bg-muted hover:bg-accent border border-border text-foreground rounded-[--radius] text-sm font-medium transition-colors"
         >
           <GoogleIcon />

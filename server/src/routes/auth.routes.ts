@@ -7,15 +7,9 @@ import { authLimiter, refreshLimiter } from '../middleware/rateLimit';
 import { registerSchema, loginSchema } from '../validators/auth.validator';
 import * as authController from '../controllers/auth.controller';
 import * as authService from '../services/auth.service';
+import { REFRESH_COOKIE_OPTS } from '../lib/cookies';
 
 export const authRouter = Router();
-
-const COOKIE_OPTS = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax' as const,
-  maxAge: 7 * 24 * 60 * 60 * 1000,
-};
 
 authRouter.post('/register', authLimiter, validate(registerSchema), asyncHandler(authController.register));
 authRouter.post('/login', authLimiter, validate(loginSchema), asyncHandler(authController.login));
@@ -32,11 +26,14 @@ authRouter.get('/google/callback',
   passport.authenticate('google', { session: false, failureRedirect: `${process.env.CLIENT_URL}/login` }),
   asyncHandler(async (req: Request, res: Response) => {
     // req.user = { userId, email } — normalised in the GoogleStrategy
-    const { accessToken, refreshToken } = await authService.loginWithGoogle(
+    // Set only the refresh cookie and redirect with a clean URL — no token in the
+    // query string (URLs leak into history/logs). The client callback page exchanges
+    // the cookie for an access token via POST /auth/refresh.
+    const { refreshToken } = await authService.loginWithGoogle(
       req.user!.userId,
       req.user!.email
     );
-    res.cookie('refreshToken', refreshToken, COOKIE_OPTS);
-    res.redirect(`${process.env.CLIENT_URL}/auth/callback?token=${accessToken}`);
+    res.cookie('refreshToken', refreshToken, REFRESH_COOKIE_OPTS);
+    res.redirect(`${process.env.CLIENT_URL}/auth/callback`);
   })
 );

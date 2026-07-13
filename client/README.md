@@ -6,9 +6,12 @@ Next.js 16 (App Router) frontend for [JobTracker](../README.md). See the root RE
 
 ```bash
 npm install
-echo "NEXT_PUBLIC_API_URL=http://localhost:4000" > .env.local
 npm run dev          # http://localhost:3000 (expects the API on port 4000)
 ```
+
+No `.env.local` needed: API calls are relative (`/api/v1/...`) and `next.config.ts`
+proxies them to `http://localhost:4000` — same-origin in dev and prod, which is what
+keeps the HttpOnly refresh cookie first-party.
 
 ## Scripts
 

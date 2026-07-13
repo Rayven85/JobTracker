@@ -27,9 +27,12 @@ Never put dashboard pages inside `(auth)/` or vice versa.
 
 ## API Call Pattern
 
-All fetch calls live in `src/lib/api/` files, never inline in components. Every call goes
-through `apiFetch` (src/lib/api/client.ts), which attaches the Bearer token and retries
-once on 401 via the refresh cookie:
+All fetch calls live in `src/lib/api/` files, never inline in components. URLs are
+**relative** (`/api/v1/...`): next.config.ts rewrites `/api/*` to the Express server
+(localhost:4000 in dev, `API_PROXY_URL` in prod), so requests are always same-origin and
+the HttpOnly refresh cookie stays first-party. Every call goes through `apiFetch`
+(src/lib/api/client.ts), which attaches the Bearer token and retries once on 401 via the
+refresh cookie:
 
 ```typescript
 // src/lib/api/applications.ts

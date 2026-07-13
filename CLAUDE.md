@@ -339,10 +339,9 @@ PORT=4000
 NODE_ENV=development
 ```
 
-client/.env.local:
-```
-NEXT_PUBLIC_API_URL=http://localhost:4000
-```
+client: no env needed in dev — API calls are relative and next.config.ts rewrites
+/api/* to http://localhost:4000 (production: API_PROXY_URL on Vercel points at the
+Railway API; the same-origin proxy keeps the refresh cookie first-party).
 
 ---
 
