@@ -3,6 +3,7 @@ import { passport } from '../lib/passport';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { authMiddleware } from '../middleware/auth';
 import { validate } from '../middleware/validate';
+import { authLimiter, refreshLimiter } from '../middleware/rateLimit';
 import { registerSchema, loginSchema } from '../validators/auth.validator';
 import * as authController from '../controllers/auth.controller';
 import * as authService from '../services/auth.service';
@@ -16,9 +17,9 @@ const COOKIE_OPTS = {
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };
 
-authRouter.post('/register', validate(registerSchema), asyncHandler(authController.register));
-authRouter.post('/login', validate(loginSchema), asyncHandler(authController.login));
-authRouter.post('/refresh', asyncHandler(authController.refresh));
+authRouter.post('/register', authLimiter, validate(registerSchema), asyncHandler(authController.register));
+authRouter.post('/login', authLimiter, validate(loginSchema), asyncHandler(authController.login));
+authRouter.post('/refresh', refreshLimiter, asyncHandler(authController.refresh));
 authRouter.post('/logout', asyncHandler(authController.logout));
 authRouter.get('/me', authMiddleware, asyncHandler(authController.me));
 

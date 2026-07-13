@@ -33,8 +33,11 @@ export function errorHandler(
     }
   }
 
+  // Unexpected errors: log server-side, but never expose internals to clients in production.
+  console.error('[errorHandler] unhandled error:', err);
+
   const isDev = process.env.NODE_ENV === 'development';
-  const message = err instanceof Error ? err.message : 'Internal server error';
+  const message = isDev && err instanceof Error ? err.message : 'Internal server error';
 
   res.status(500).json({
     success: false,

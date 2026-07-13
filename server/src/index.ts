@@ -22,6 +22,10 @@ for (const key of REQUIRED_ENV) {
 
 const app = express();
 
+// Railway terminates TLS at a proxy — trust the first hop so req.ip (used by the
+// auth rate limiter) is the real client IP, not the proxy's.
+app.set('trust proxy', 1);
+
 app.use(helmet());
 app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
 app.use(express.json());
