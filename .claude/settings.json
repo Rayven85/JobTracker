@@ -49,7 +49,8 @@
       "Bash(pkill -f \"next dev\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/dashboard)",
       "Bash(git commit *)",
-      "Bash(python3 -c \"import yaml, sys; yaml.safe_load\\(open\\('/Users/zhaoxiaorong/Desktop/WORK/JobTracker/.github/workflows/ci.yml'\\)\\); print\\('YAML valid'\\)\")"
+      "Bash(python3 -c \"import yaml, sys; yaml.safe_load\\(open\\('/Users/zhaoxiaorong/Desktop/WORK/JobTracker/.github/workflows/ci.yml'\\)\\); print\\('YAML valid'\\)\")",
+      "Bash(git reset *)"
     ]
   }
 }

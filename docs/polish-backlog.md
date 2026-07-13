@@ -8,6 +8,23 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 ---
 
+## Production Bugs (verified or near-certain)
+
+- [ ] **Cross-site refresh cookie is dead in production.** The refresh cookie uses
+  `sameSite: 'lax'` (`auth.controller.ts`, duplicated in `auth.routes.ts`), but the client
+  (`*.vercel.app`) and the API (`*.up.railway.app`) are different sites. Modern browsers
+  won't store/send a cross-site Lax cookie, so on the live site a page refresh (or access
+  token expiry after 15 min) logs the user out — `POST /auth/refresh` never receives the
+  cookie. Safari blocks third-party cookies even with `SameSite=None`. **Recommended fix:**
+  proxy the API through Next.js `rewrites` (`/api/* → Railway URL`) so all requests are
+  same-origin; the SameSite problem disappears in every browser. Verify by logging in on
+  the live site and pressing F5.
+
+- [ ] **OAuth callback leaks the access token in the redirect URL**
+  (`auth.routes.ts` — `res.redirect(...?token=${accessToken})`). Tokens in URLs end up in
+  browser history and logs. Fix together with the item above: after setting the refresh
+  cookie, redirect with no token and let the client call `/auth/refresh` to obtain one.
+
 ## Docker / Local Onboarding
 
 - [ ] **`docker compose up` likely fails to connect to the DB.** The `server` service
@@ -17,6 +34,8 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
   name (`postgres:5432`) — e.g. override `DATABASE_URL` in `docker-compose.yml` for the
   `server` service, rather than relying on the local `.env`.
   _(Inferred from config; not yet reproduced — verify once Docker is installed.)_
+  _Note: the README's Docker quick-start section was removed until this works; add it back
+  once verified._
 
 - [ ] **Verify the full `docker compose up --build` stack end-to-end.** Docker Desktop is
   not installed on the current dev machine, so the compose path has never been run here.
@@ -24,35 +43,65 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
   works at `localhost:3000`. Goal: "clone → one command → full stack running" as a genuine,
   demoable claim.
 
-- [ ] **README references `server/.env.example`, which does not exist.** The setup step
-  `cp server/.env.example server/.env` can't work. Add a real `server/.env.example`
-  (keys only, no secrets) so onboarding actually works.
+- [x] **README references `server/.env.example`, which does not exist.** Added a real
+  `server/.env.example` (keys only, no secrets). _(2026-07-13)_
+
+- [ ] **Google OAuth env vars are mandatory at startup** (`lib/passport.ts` throws if
+  `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are empty), although the feature is optional.
+  Register the Google strategy conditionally and hide/disable the "Sign in with Google"
+  button when unconfigured, so a fresh clone runs without placeholder values.
 
 ## Stale Docs — AI provider swapped Gemini → Groq
 
-The app now uses Groq (`groq-sdk`, `GROQ_API_KEY`), but several places still say Gemini:
+- [x] `README.md` — rewritten: Groq, Next 16, live demo link, features section, no shadcn
+  claim, `SERVER_URL` documented. _(2026-07-13)_
+- [x] `CLAUDE.md` (root) — AI Integration section rewritten for Groq (`generateJSON`/
+  `generateText` contract), structure map aligned with the real file tree. _(2026-07-13)_
+- [x] `.github/workflows/ci.yml` — CI had **never** passed (19/19 failures) because
+  `GROQ_API_KEY`, `SERVER_URL`, and `GOOGLE_CLIENT_*` were missing at import time. Now uses
+  hermetic dummy values (Groq SDK is mocked in tests; S3 presigning is local; JWT accepts
+  any string) — **no repository secrets required**. _(2026-07-13)_
+- [x] Removed dead `@google/generative-ai` dependency from `server/package.json`;
+  deleted stray root `.env`. **TODO (manual): revoke the old Gemini API key in Google AI
+  Studio.** _(2026-07-13)_
 
-- [ ] `README.md` — architecture diagram + tech-stack table + prerequisites still say
-  "Google Gemini 1.5-flash". Update to Groq.
-- [ ] `CLAUDE.md` (root) — the whole "AI Integration" section documents Gemini APIs
-  (`@google/generative-ai`, `responseMimeType` JSON mode). Rewrite for Groq.
-- [ ] `.github/workflows/ci.yml` — passes `GEMINI_API_KEY` secret; the code reads
-  `GROQ_API_KEY`. Update the CI env (and the GitHub secret) accordingly.
+## Testing
+
+- [ ] **E2E golden path (Playwright):** register → create application → paste JD →
+  generate tailored resume → download PDF. Wire into CI. The repo has unit + integration
+  layers; this is the missing third layer.
+
+- [ ] **Cover the smart-merge logic with unit tests.** `computeSuggestions` /
+  `syncResume` (index-based merge overwrite, case-insensitive skill dedupe, empty profile,
+  out-of-range `existingIndex`) is the most intricate code in the repo and has only 2 tests
+  (`profile.test.ts`).
 
 ## Features / UX
+
+- [ ] **Kanban board for applications.** Commit `ab49db9` mentions Kanban but only the
+  dashboard funnel chart exists. A drag-and-drop status board (e.g. dnd-kit) is the most
+  demo-friendly missing feature.
 
 - [ ] **Multiple tailored-resume PDF templates.** The tailored-resume PDF export (Resume tab
   on an application) currently renders one default single-column template. Offer a few
   templates (e.g. classic, modern, compact) the user can pick from before Download/Save.
   Template lives in `client/src/lib/resume-pdf.tsx` (`@react-pdf/renderer`).
 
+- [ ] **README screenshots / demo GIF.** Placeholder comment is in README. Best shots:
+  application detail (AI match analysis), Resume tab (tailored resume editor + PDF preview),
+  dashboard. A 60–90s GIF of the golden path beats static images.
+
 ## Deployment / "Going live"
 
-- [ ] Confirm current Railway deploy status. Production path (`server/Dockerfile.prod` +
-  `railway.toml`) is sound and independent of the local compose issues above. Verify the
-  live URL works, env vars are set on Railway (incl. `GROQ_API_KEY`, not `GEMINI_API_KEY`),
-  and migrations run on deploy. Add the live URL to the README once confirmed.
+- [~] Confirm current Railway deploy status. **Verified 2026-07-12:** frontend
+  (job-tracker-gamma-lyart.vercel.app) serves, API `/health` returns ok, CORS allows the
+  Vercel origin. Live URL added to README. **Still to verify:** AI features work in prod
+  (`GROQ_API_KEY` set on Railway), S3 upload works in prod, and the cross-site cookie bug
+  above (which currently undermines "fully working in production").
+
+- [ ] Git workflow: start using feature branches + self-reviewed PRs instead of pushing
+  straight to `main` — NZ employers look for PR discipline in the repo history.
 
 ---
 
-_Last updated: 2026-07-12_
+_Last updated: 2026-07-13_

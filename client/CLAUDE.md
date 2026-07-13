@@ -15,8 +15,10 @@ app/
   (dashboard)/     ← all authenticated pages — includes Sidebar + Header via layout
     layout.tsx     ← wraps all dashboard pages with auth check + sidebar
     dashboard/page.tsx
-    applications/page.tsx
+    applications/page.tsx     (+ applications/[id]/page.tsx detail with tabs)
     resumes/page.tsx
+    profile/page.tsx
+  auth/callback/   ← Google OAuth landing (outside both groups)
 ```
 
 Never put dashboard pages inside `(auth)/` or vice versa.
@@ -25,21 +27,24 @@ Never put dashboard pages inside `(auth)/` or vice versa.
 
 ## API Call Pattern
 
-All fetch calls live in `src/lib/api/` files, never inline in components:
+All fetch calls live in `src/lib/api/` files, never inline in components. Every call goes
+through `apiFetch` (src/lib/api/client.ts), which attaches the Bearer token and retries
+once on 401 via the refresh cookie:
 
 ```typescript
 // src/lib/api/applications.ts
+import { apiFetch } from './client'
+
 export async function getApplications(): Promise<Application[]> {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/applications`, {
-    headers: { Authorization: `Bearer ${getAccessToken()}` }
-  });
-  if (!res.ok) throw new Error('Failed to fetch applications');
-  const json = await res.json();
-  return json.data;
+  const res = await apiFetch('/api/v1/applications')
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error?.message ?? 'Failed to fetch applications')
+  return json.data
 }
 ```
 
-Components call the lib/api functions via hooks in `src/hooks/`.
+Pages and feature components call these lib/api functions directly (with useState/useEffect
+for loading/error state); presentational components receive data as props.
 
 ---
 
@@ -53,10 +58,10 @@ On 401 response: call refresh endpoint → retry original request once → if st
 
 ## Component Conventions
 
-- `src/components/ui/` — shadcn/ui primitives only, never modify
-- `src/components/applications/`, `resumes/`, `layout/` — feature components
+- All components are hand-rolled Tailwind — no UI kit (shadcn was considered, not adopted)
+- `src/components/applications/`, `shared/`, `profile-forms/`, `layout/` — feature components
 - Test files co-located: `ApplicationCard.test.tsx` next to `ApplicationCard.tsx`
-- Never create a component that fetches data — use hooks, pass data as props
+- Keep data fetching in pages/feature components via lib/api; presentational components take props
 
 ---
 

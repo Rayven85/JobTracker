@@ -3,8 +3,9 @@
 ## What This Is
 AI-powered job application tracker built as a software engineering portfolio project.
 Target audience: NZ tech employers (Xero, ASB, Orion Health, Spark, Windcave, etc.)
-Demonstrates: TypeScript full-stack, PostgreSQL, AWS S3 + RDS, Docker, GitHub Actions CI/CD,
-JWT auth from scratch, Gemini AI integration.
+Demonstrates: TypeScript full-stack, PostgreSQL, AWS S3, Docker, GitHub Actions CI/CD,
+JWT auth from scratch, provider-swappable AI integration (currently Groq).
+Deployed: client on Vercel (job-tracker-gamma-lyart.vercel.app), API + Postgres on Railway.
 
 ---
 
@@ -12,22 +13,26 @@ JWT auth from scratch, Gemini AI integration.
 
 ```
 jobtracker/
-├── client/                        # Next.js 15 App Router — port 3000 (see client/CLAUDE.md)
+├── client/                        # Next.js 16 App Router — port 3000 (see client/CLAUDE.md)
 │   ├── src/
 │   │   ├── app/                   # Pages (App Router only — no pages/ directory)
 │   │   │   ├── (auth)/            # login/, register/ — no layout chrome
-│   │   │   ├── (dashboard)/       # dashboard/, applications/, resumes/ — with sidebar
+│   │   │   ├── (dashboard)/       # dashboard/, applications/ (+[id] detail), resumes/, profile/ — with sidebar
+│   │   │   ├── auth/callback/     # Google OAuth landing page (reads token, stores, redirects)
 │   │   │   └── layout.tsx
-│   │   ├── components/
-│   │   │   ├── ui/                # shadcn/ui primitives (Button, Input, Badge, etc.)
-│   │   │   ├── applications/      # ApplicationCard, StatusBadge, KanbanBoard, etc.
-│   │   │   ├── resumes/           # ResumeUploader, ResumeCard, etc.
+│   │   ├── components/            # Hand-rolled Tailwind components — no UI kit
+│   │   │   ├── applications/      # ApplicationCard, ApplicationForm, LocationCombobox
+│   │   │   ├── shared/            # StatusBadge
 │   │   │   ├── profile-forms/      # Shared structured-edit forms used by BOTH profile page & resume modal: FormModal, styles, ExperienceForm, EducationForm, CertificationForm, HeroFieldsForm, SkillsEditor, ExtractedDataEditor, MergeReview (smart-merge review)
-│   │   │   └── layout/            # Sidebar, Header, etc.
+│   │   │   └── layout/            # Sidebar
+│   │   ├── contexts/              # AuthContext, ThemeContext
 │   │   ├── lib/
-│   │   │   ├── api/               # One file per resource: applications.ts, resumes.ts, auth.ts
+│   │   │   ├── api/               # One file per resource: client.ts (token+refresh), applications.ts, resumes.ts, auth.ts, profile.ts, dashboard.ts
+│   │   │   ├── resume-pdf.tsx     # Tailored-resume PDF template (@react-pdf/renderer, client-side export)
+│   │   │   ├── status.ts          # Status labels/colors/pipeline order
+│   │   │   ├── token.ts           # In-memory access token store
 │   │   │   └── utils.ts
-│   │   ├── hooks/                 # use-applications.ts, use-auth.ts, etc.
+│   │   ├── hooks/                 # use-auth.ts
 │   │   └── types/                 # TypeScript types (keep in sync with server validators)
 │   ├── .env.local
 │   └── package.json
@@ -67,7 +72,8 @@ jobtracker/
 │   │   │   ├── auth.ts            # JWT verification → attaches req.user
 │   │   │   ├── asyncHandler.ts    # Wraps async handlers, passes errors to next()
 │   │   │   ├── validate.ts        # Zod validation middleware factory
-│   │   │   └── errorHandler.ts    # Global error handler — formats AppError to response
+│   │   │   ├── rateLimit.ts       # authLimiter (login/register), refreshLimiter — skipped when NODE_ENV=test
+│   │   │   └── errorHandler.ts    # Global error handler — formats AppError to response; generic message on prod 500s
 │   │   ├── validators/
 │   │   │   ├── auth.validator.ts
 │   │   │   ├── resume.validator.ts        # + updateParsedTextSchema, updateExtractedDataSchema (reuses profile.validator item schemas)
@@ -256,31 +262,26 @@ Provider-swappable AI layer. Changing provider = editing one file only: server/s
 All prompts and AI calls live exclusively in server/src/services/ai.service.ts.
 Never call the AI provider from controllers or other service files.
 
-Current provider: Google Gemini (free tier)
-Package: @google/generative-ai
-Model: gemini-1.5-flash (free tier — 15 RPM, 1M TPM, 1500 RPD)
+Current provider: Groq (free tier)
+Package: groq-sdk
+Model: llama-3.3-70b-versatile (free tier — 12k tokens/min counting input + reserved max_tokens)
+
+lib/ai.ts exposes a two-function contract — ai.service.ts uses ONLY these:
 
 ```typescript
 // server/src/lib/ai.ts  ← only file that changes when swapping providers
-import { GoogleGenerativeAI } from '@google/generative-ai';
-if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is required');
-export const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+generateJSON<T>(prompt: string, maxTokens = 4000): Promise<T>   // response_format json_object; throws AppError(500,'AI_PARSE_ERROR') on bad JSON
+generateText(prompt: string, maxTokens = 1500): Promise<string> // plain text (cover letters)
 ```
 
-Structured JSON output — use Gemini's native JSON mode (guarantees valid JSON, no prompt tricks needed):
-```typescript
-const model = genAI.getGenerativeModel({
-  model: 'gemini-1.5-flash',
-  generationConfig: { responseMimeType: 'application/json' }
-});
-const result = await model.generateContent(prompt);
-const parsed = JSON.parse(result.response.text());
-```
-Always wrap JSON.parse() in try/catch. On failure: throw new AppError(500, 'AI_PARSE_ERROR', 'AI response could not be parsed').
+Free-tier handling inside lib/ai.ts (do not duplicate in callers):
+- 429s are retried with backoff honouring the server's retry-after; genuine exhaustion
+  becomes AppError(503, 'AI_RATE_LIMITED', ...).
+- Callers pass a max_tokens budget sized to each call; ai.service.ts also truncates large
+  inputs (MAX_RESUME_CHARS / MAX_PROFILE_CHARS / MAX_JD_CHARS) so input + budget fits the limit.
 
-Plain text output (cover letters) — omit generationConfig, call result.response.text() directly.
-
-Three AI service methods (signatures never change regardless of provider):
+Core AI service methods (public signatures take (applicationId, userId) and resolve resume
+text internally; also: extractProfileFromResume, detectExperienceMerges, generateTailoredResume):
 
 analyzeApplication(resumeText, jobDescription):
   Returns: { score: number, summary: string, matched: string[], missing: string[],
@@ -329,10 +330,11 @@ AWS_REGION=ap-southeast-2
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
 S3_BUCKET_NAME=jobtracker-resumes-dev
-GEMINI_API_KEY=
+GROQ_API_KEY=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 CLIENT_URL=http://localhost:3000
+SERVER_URL=http://localhost:4000
 PORT=4000
 NODE_ENV=development
 ```
