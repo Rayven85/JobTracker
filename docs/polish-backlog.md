@@ -10,25 +10,23 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 ## Production Bugs (verified or near-certain)
 
-- [~] **Cross-site refresh cookie is dead in production.** _(Confirmed 2026-07-13 by the
-  user: F5 on the live site returns to /login.)_ **Code fix merged 2026-07-13:** client now
-  makes relative `/api/*` calls and `next.config.ts` rewrites them to the API
-  (`API_PROXY_URL` in prod, localhost:4000 in dev), so the cookie is first-party in every
-  browser. **Remaining manual steps to go live:**
-  1. Vercel → env: add `API_PROXY_URL=https://jobtracker-production-bdf3.up.railway.app`,
-     delete `NEXT_PUBLIC_API_URL`, redeploy.
-  2. Railway → env: set `SERVER_URL=https://job-tracker-gamma-lyart.vercel.app` (OAuth
-     callback must go through the proxy), keep `CLIENT_URL` at the Vercel URL, redeploy.
-  3. Google Cloud console → OAuth client → authorised redirect URI:
-     `https://job-tracker-gamma-lyart.vercel.app/api/v1/auth/google/callback`.
-  4. Verify: log in on the live site, press F5 — should stay logged in (test Safari too);
-     then Google login end-to-end. Afterwards remove the legacy `?token=` branch in
-     `client/src/app/auth/callback/page.tsx`.
+- [x] **Cross-site refresh cookie is dead in production.** Fixed and verified in prod
+  2026-07-14. The full story turned out to be **three stacked bugs** with one symptom
+  (page refresh bounced to /login):
+  1. Cross-site cookie: fixed via same-origin proxy (`next.config.ts` rewrites `/api/*`;
+     `API_PROXY_URL` on Vercel, `SERVER_URL` on Railway points at the client origin,
+     Google console redirect URI updated). _(a2e2e16)_
+  2. `getMe()` response-shape mismatch: `data` IS the user object, but an `as` cast
+     claimed `{ user }`, so session restore set `user=undefined` while every request
+     returned 200. Regression tests added. _(c9de91d)_
+  3. Concurrent-refresh race: AuthProvider and the OAuth callback page both fired
+     `/auth/refresh` with the same cookie; rotation 401'd the loser. Callback page now
+     waits for AuthProvider; `refreshAccessToken` is single-flight. _(2333428)_
 
 - [x] **OAuth callback leaks the access token in the redirect URL.** Fixed 2026-07-13:
   callback sets only the refresh cookie and redirects with a clean URL; the client
-  callback page exchanges the cookie via `POST /auth/refresh`. (Depends on the proxy
-  migration above for production.)
+  exchanges the cookie via the AuthProvider restore flow. Legacy `?token=` branch
+  removed 2026-07-14. Verified in prod (Google login end-to-end).
 
 - [ ] **Rate limiter IP granularity behind double proxy.** With requests flowing
   client → Vercel proxy → Railway, `trust proxy: 1` resolves `req.ip` to Vercel's egress
@@ -114,4 +112,4 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 ---
 
-_Last updated: 2026-07-13_
+_Last updated: 2026-07-14_
