@@ -75,9 +75,10 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 ## Testing
 
-- [ ] **E2E golden path (Playwright):** register → create application → paste JD →
-  generate tailored resume → download PDF. Wire into CI. The repo has unit + integration
-  layers; this is the missing third layer.
+- [x] **E2E golden path (Playwright).** Done 2026-07-14 (`feat/e2e-golden-path`):
+  hermetic suite (stubbed Groq via `GROQ_BASE_URL`, real Postgres) covering the golden
+  path (application → tailored resume → PDF download) and session persistence across
+  refresh — the regression test for the auth saga. Wired into CI as `test-e2e`.
 
 - [ ] **Cover the smart-merge logic with unit tests.** `computeSuggestions` /
   `syncResume` (index-based merge overwrite, case-insensitive skill dedupe, empty profile,
@@ -107,8 +108,9 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
   (`GROQ_API_KEY` set on Railway), S3 upload works in prod, and the cross-site cookie bug
   above (which currently undermines "fully working in production").
 
-- [ ] Git workflow: start using feature branches + self-reviewed PRs instead of pushing
-  straight to `main` — NZ employers look for PR discipline in the repo history.
+- [~] Git workflow: feature branches + self-reviewed PRs instead of pushing straight to
+  `main` — NZ employers look for PR discipline in the repo history. Started with
+  `feat/e2e-golden-path` (2026-07-14); applies to all future feature work.
 
 ---
 

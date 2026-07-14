@@ -27,3 +27,7 @@ npm-debug.log*
 
 # Test coverage
 coverage/
+
+# Playwright E2E artifacts
+e2e/test-results/
+e2e/playwright-report/

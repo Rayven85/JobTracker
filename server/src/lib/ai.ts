@@ -13,7 +13,12 @@ import { AppError } from './AppError';
 
 if (!process.env.GROQ_API_KEY) throw new Error('GROQ_API_KEY is required');
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+// GROQ_BASE_URL is only set by the E2E suite, which points it at a local stub
+// (e2e/mock-groq.mjs) so browser tests run hermetically — no real LLM calls.
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
+  ...(process.env.GROQ_BASE_URL ? { baseURL: process.env.GROQ_BASE_URL } : {}),
+});
 const MODEL = 'llama-3.3-70b-versatile';
 
 // Free-tier limit is 12000 tokens/minute, counting input + reserved max_tokens. Two guards:
