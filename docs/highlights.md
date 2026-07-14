@@ -5,6 +5,25 @@ interview answers. Append an entry after every significant piece of work.
 
 ---
 
+## 2026-07-14 — Smart-merge logic under test (server suite 33 → 44)
+
+**What:** The profile smart-merge pipeline — the product's most intricate code — went
+from 2 tests to 13. New coverage (`profile-merge.test.ts`, 11 tests): case-insensitive
+suggestion dedupe across skills/experience/education, the dismiss flow (incl. 403 on
+another user's resume), and `buildProfileFromResumes` surviving individual extraction
+failures without losing the batch.
+
+**The interesting part — testing around an LLM:** the AI merge plan is validated at the
+trust boundary. Tests prove that malformed LLM output (out-of-range indices, missing
+merged entries) is filtered before it can corrupt the profile, and that the service
+short-circuits without calling the LLM at all when there is nothing to compare
+(asserted via the SDK mock's call count).
+
+**Resume angle:** "Treated LLM output as untrusted input: index-validated every
+AI-proposed merge at the service boundary and proved the filters with SDK-boundary
+tests, including no-call short-circuit assertions."
+
+
 ## 2026-07-14 — E2E test layer: hermetic Playwright suite in CI
 
 **What:** Added the third testing layer (unit → integration → E2E): Playwright browser

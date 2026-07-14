@@ -80,10 +80,12 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
   path (application → tailored resume → PDF download) and session persistence across
   refresh — the regression test for the auth saga. Wired into CI as `test-e2e`.
 
-- [ ] **Cover the smart-merge logic with unit tests.** `computeSuggestions` /
-  `syncResume` (index-based merge overwrite, case-insensitive skill dedupe, empty profile,
-  out-of-range `existingIndex`) is the most intricate code in the repo and has only 2 tests
-  (`profile.test.ts`).
+- [x] **Cover the smart-merge logic with unit tests.** Done 2026-07-14
+  (`test/smart-merge-coverage`): 11 tests in `profile-merge.test.ts` covering
+  case-insensitive suggestion dedupe (skills/experience/education), dismiss flow + 403,
+  AI merge-plan index filtering (out-of-range / malformed matches from the LLM are
+  dropped), no-AI-call short circuits, and `buildProfileFromResumes` surviving individual
+  extraction failures. Server suite: 33 → 44 tests.
 
 ## Features / UX
 
