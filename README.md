@@ -8,7 +8,17 @@
 
 Built as a full-stack portfolio project targeting New Zealand tech employers. Demonstrates TypeScript end-to-end, PostgreSQL with Prisma, AWS S3 presigned uploads, JWT auth from scratch with refresh token rotation, Google OAuth, a provider-swappable LLM integration layer, Docker, and GitHub Actions CI.
 
-<!-- TODO: screenshots — application detail (AI analysis) + Resume tab (tailored resume editor + PDF preview) + dashboard -->
+## Screenshots
+
+| Dashboard | Applications |
+|---|---|
+| ![Dashboard — stats, funnel, activity feed](docs/screenshots/dashboard.png) | ![Applications list with status pipeline](docs/screenshots/applications.png) |
+
+| AI match analysis | Tailored resume editor |
+|---|---|
+| ![AI match analysis with score and expandable insights](docs/screenshots/ai-analysis.png) | ![Tailored resume structured editor with PDF export](docs/screenshots/tailored-resume.png) |
+
+<sub>Screenshots are generated reproducibly by the same hermetic pipeline as the E2E suite: `cd e2e && npm run screenshots` seeds a demo account against a stubbed LLM and captures these images.</sub>
 
 ---
 

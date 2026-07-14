@@ -14,7 +14,10 @@ const EVENT_LABELS: Record<string, string> = {
   ANALYSIS_COMPLETED: 'AI analysis completed',
   COVER_LETTER_GENERATED: 'Cover letter generated',
   INTERVIEW_PREP_GENERATED: 'Interview prep generated',
+  TAILORED_RESUME_GENERATED: 'Tailored resume generated',
+  RESUME_ATTACHED: 'Resume attached',
   NOTE_ADDED: 'Note added',
+  MANUAL_NOTE: 'Note added',
 }
 
 function timeAgo(date: string) {
