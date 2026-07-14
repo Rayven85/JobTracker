@@ -5,6 +5,28 @@ interview answers. Append an entry after every significant piece of work.
 
 ---
 
+## 2026-07-14 — Reproducible README screenshot pipeline (and the orphan-process hunt)
+
+**What:** README screenshots are not hand-taken — `npm run screenshots` boots the same
+hermetic stack as the E2E suite, seeds a realistic demo account (6 applications across
+the pipeline, AI analysis, tailored resume) via the API, and captures four 2x-scale
+shots through a real browser. Re-runnable whenever the UI changes; screenshots can never
+drift from the product again. The pipeline immediately caught a real bug: the dashboard
+activity feed rendered a raw `TAILORED_RESUME_GENERATED` enum (missing label mapping).
+
+**The debugging story:** the first runs produced a match score of 40 instead of the
+stub's 78. Root cause: an **orphaned dev-server process** from a stopped task days
+earlier still owned port 4000 — running with the real Groq API key and the dev database.
+The "hermetic" tests had been silently talking to a real LLM. Found by comparing the
+process start time against the session timeline (`lsof` + `ps -o lstart`), killed the
+orphan, and re-ran clean. Lesson: when a stub returns impossible values, first ask
+*which process actually answered*.
+
+**Resume angle:** "Automated README screenshots as a reproducible browser pipeline
+sharing the E2E stack's hermetic stubs — and traced a 'stub returning wrong values'
+mystery to an orphaned process from a previous session holding the port with real
+credentials."
+
 ## 2026-07-14 — Smart-merge logic under test (server suite 33 → 44)
 
 **What:** The profile smart-merge pipeline — the product's most intricate code — went
