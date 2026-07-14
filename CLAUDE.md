@@ -100,8 +100,13 @@ jobtracker/
 │   ├── .env
 │   └── package.json
 │
+├── e2e/                           # Playwright E2E — full stack in a real browser (see e2e/playwright.config.ts)
+│   ├── playwright.config.ts       # webServer boots mock-groq (:4010) + server (:4000) + client (:3000)
+│   ├── mock-groq.mjs              # Stubbed Groq endpoint — server started with GROQ_BASE_URL points here
+│   └── tests/                     # golden-path.spec.ts, session.spec.ts, helpers.ts
 ├── docker-compose.yml
-├── .github/workflows/ci.yml
+├── .github/workflows/ci.yml      # test-server, test-client, test-e2e, build
+├── docs/highlights.md             # Engineering war stories + quantified outcomes (resume material — append after significant work)
 └── CLAUDE.md
 ```
 

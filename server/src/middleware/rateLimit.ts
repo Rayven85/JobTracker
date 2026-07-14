@@ -10,7 +10,10 @@ function handler(_req: Request, res: Response): void {
 }
 
 // Skipped in tests so Supertest suites can hit auth endpoints freely.
-const skip = () => process.env.NODE_ENV === 'test';
+// DISABLE_RATE_LIMIT=1 is set by the E2E suite: its dev server persists across local
+// runs, so repeated register/login calls would otherwise exhaust the window.
+const skip = () =>
+  process.env.NODE_ENV === 'test' || process.env.DISABLE_RATE_LIMIT === '1';
 
 // Credential endpoints (login/register) — tight window against brute force.
 export const authLimiter = rateLimit({

@@ -90,6 +90,74 @@ jobs:
       - name: Run client tests
         run: cd client && npx jest --coverage
 
+  test-e2e:
+    name: E2E tests (Playwright)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: jobtracker_test
+          POSTGRES_USER: jobtracker
+          POSTGRES_PASSWORD: password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            server/package-lock.json
+            client/package-lock.json
+            e2e/package-lock.json
+
+      - name: Install server dependencies
+        run: cd server && npm ci
+
+      - name: Generate Prisma client
+        run: cd server && npx prisma generate
+        env:
+          DATABASE_URL: postgresql://jobtracker:password@localhost:5432/jobtracker_test
+
+      - name: Run Prisma migrations
+        run: cd server && npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://jobtracker:password@localhost:5432/jobtracker_test
+
+      - name: Install client dependencies
+        run: cd client && npm ci
+
+      - name: Install E2E dependencies
+        run: cd e2e && npm ci
+
+      - name: Install Playwright browser
+        run: cd e2e && npx playwright install --with-deps chromium
+
+      # Playwright's webServer config boots the stubbed Groq endpoint, the Express API,
+      # and the Next.js client, then runs browser tests against the full stack.
+      - name: Run E2E tests
+        run: cd e2e && npx playwright test
+        env:
+          E2E_DATABASE_URL: postgresql://jobtracker:password@localhost:5432/jobtracker_test
+
+      - name: Upload traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: e2e/test-results/
+          retention-days: 7
+
   build:
     name: Build check
     runs-on: ubuntu-latest

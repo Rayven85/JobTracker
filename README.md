@@ -135,12 +135,20 @@ cd server && npx jest --runInBand
 # Client tests
 cd client && npx jest
 
+# E2E tests (Playwright — boots the full stack against a stubbed LLM; real Postgres)
+cd e2e && npm install && npx playwright install chromium
+npm test
+
 # With coverage
 cd server && npx jest --coverage --runInBand
 cd client && npx jest --coverage
 ```
 
-CI runs both suites on every push — the server suite against a real Postgres service container — followed by a TypeScript check and a production build. The pipeline needs **no repository secrets**: the Groq SDK is mocked in tests and everything else accepts dummy values.
+Three layers: **unit/component** (client, Jest + RTL), **integration** (server, Supertest
+against a real Postgres — Prisma is never mocked), and **E2E** (Playwright drives a real
+browser through the full stack; the only fake is a local Groq stub, so the suite is
+hermetic). CI runs all three on every push, followed by a TypeScript check and a
+production build. The pipeline needs **no repository secrets**.
 
 ---
 
