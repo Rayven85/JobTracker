@@ -1,15 +1,13 @@
 import { getAccessToken, setAccessToken, clearAccessToken } from '@/lib/token'
+import { refreshAccessToken } from '@/lib/api/auth'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? ''
 
+// Delegates to the single-flight refresh in lib/api/auth — refresh tokens rotate on
+// use, so concurrent refreshes must share one request or the loser gets 401'd.
 async function tryRefresh(): Promise<string | null> {
-  const res = await fetch(`${API_URL}/api/v1/auth/refresh`, {
-    method: 'POST',
-    credentials: 'include',
-  })
-  if (!res.ok) return null
-  const json = await res.json()
-  return (json.success && json.data?.accessToken) ? json.data.accessToken : null
+  const data = await refreshAccessToken()
+  return data?.accessToken ?? null
 }
 
 // Base fetch that attaches the Bearer token, retries once on 401 via refresh cookie.

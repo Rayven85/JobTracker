@@ -1,37 +1,23 @@
 'use client'
 
-import { Suspense, useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
-import { setAccessToken } from '@/lib/token'
-import { getMe, refreshAccessToken } from '@/lib/api/auth'
+import { useAuth } from '@/hooks/use-auth'
 
-function CallbackInner() {
-  const searchParams = useSearchParams()
+// Landing page after the Google OAuth redirect. By the time this page loads, the
+// OAuth callback has already set the HttpOnly refresh cookie, and AuthProvider
+// (mounted in the root layout) exchanges it for a session on mount. This page must
+// NOT call /auth/refresh itself: refresh tokens rotate on use, so a second in-flight
+// refresh with the same cookie loses the race and 401s — bouncing the user to /login.
+export default function AuthCallbackPage() {
+  const { user, isLoading } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
-    async function completeSignIn() {
-      // The OAuth callback sets the HttpOnly refresh cookie and redirects here with no
-      // token in the URL — exchange the cookie for an access token. (Legacy ?token=
-      // param still honoured during rollout.)
-      let token = searchParams.get('token')
-      if (!token) {
-        const refreshed = await refreshAccessToken()
-        token = refreshed?.accessToken ?? null
-      }
-      if (!token) { router.replace('/login'); return }
-
-      setAccessToken(token)
-      try {
-        await getMe(token)
-        router.replace('/dashboard')
-      } catch {
-        router.replace('/login')
-      }
-    }
-    completeSignIn()
-  }, [searchParams, router])
+    if (isLoading) return
+    router.replace(user ? '/dashboard' : '/login')
+  }, [user, isLoading, router])
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
@@ -40,13 +26,5 @@ function CallbackInner() {
         <p className="text-sm text-muted-foreground">Signing you in…</p>
       </div>
     </div>
-  )
-}
-
-export default function AuthCallbackPage() {
-  return (
-    <Suspense>
-      <CallbackInner />
-    </Suspense>
   )
 }

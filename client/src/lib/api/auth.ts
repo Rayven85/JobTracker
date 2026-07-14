@@ -37,7 +37,20 @@ export async function logout(): Promise<void> {
   })
 }
 
-export async function refreshAccessToken(): Promise<{ accessToken: string } | null> {
+// Single-flight: refresh tokens rotate on use, so two concurrent refreshes with the
+// same cookie make the loser 401. Concurrent callers share one in-flight request.
+let refreshInFlight: Promise<{ accessToken: string } | null> | null = null
+
+export function refreshAccessToken(): Promise<{ accessToken: string } | null> {
+  if (!refreshInFlight) {
+    refreshInFlight = doRefresh().finally(() => {
+      refreshInFlight = null
+    })
+  }
+  return refreshInFlight
+}
+
+async function doRefresh(): Promise<{ accessToken: string } | null> {
   const res = await fetch(`${API_URL}/api/v1/auth/refresh`, {
     method: 'POST',
     credentials: 'include',
