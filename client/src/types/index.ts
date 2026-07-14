@@ -1,8 +1,9 @@
+// Shape returned by /auth/login, /auth/register and /auth/me (see server auth.service select)
 export interface User {
   id: string
   email: string
   name: string | null
-  createdAt: string
+  avatarUrl: string | null
 }
 
 export interface AuthResponse {

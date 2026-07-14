@@ -39,7 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!data) return
         setAccessToken(data.accessToken)
         try {
-          const { user: me } = await getMe(data.accessToken)
+          const me = await getMe(data.accessToken)
           setUser(me)
         } catch {
           clearAccessToken()

@@ -1,4 +1,4 @@
-import { AuthResponse } from '@/types'
+import { AuthResponse, User } from '@/types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? ''
 
@@ -47,12 +47,13 @@ export async function refreshAccessToken(): Promise<{ accessToken: string } | nu
   return json.success ? (json.data as { accessToken: string }) : null
 }
 
-export async function getMe(accessToken: string): Promise<{ user: { id: string; email: string; name: string | null; createdAt: string } }> {
+// The API returns the user object directly in `data` — not wrapped in `{ user }`.
+export async function getMe(accessToken: string): Promise<User> {
   const res = await fetch(`${API_URL}/api/v1/auth/me`, {
     headers: { Authorization: `Bearer ${accessToken}` },
     credentials: 'include',
   })
   const json = await res.json()
   if (!json.success) throw new Error(json.error?.message ?? 'Failed to fetch user')
-  return json.data as { user: { id: string; email: string; name: string | null; createdAt: string } }
+  return json.data as User
 }
